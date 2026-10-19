@@ -79,6 +79,28 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
             const plan = (inv.plan as { instalments?: { dueOn: string; amount: string }[] } | null)?.instalments ?? null;
             const next = plan ? nextInstalment(plan, paid) : null;
             const s = invoiceStatus[inv.status];
+            // Everyone withdrawn: nothing to pay, just say what happened to the money.
+            if (inv.lines.length === 0) {
+              return (
+                <Card key={inv.id} className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{inv.event.title}</p>
+                      <p className="text-sm text-ink-soft">{formatDayRange(inv.event.startsOn, inv.event.endsOn)}</p>
+                    </div>
+                    <Badge tone={s.tone}>{s.label}</Badge>
+                  </div>
+                  <p className="mt-3 text-sm text-ink-soft">
+                    Nobody from your family is going any more.{" "}
+                    {toCents(inv.amountRefunded) > 0
+                      ? `${formatMoney(toCents(inv.amountRefunded), currency)} has been refunded.`
+                      : paid > 0
+                        ? "Your refund is on its way."
+                        : "There's nothing to pay."}
+                  </p>
+                </Card>
+              );
+            }
             return (
               <Card key={inv.id} className="p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -143,7 +165,7 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
                     </ul>
                   </div>
                 )}
-                {inv.event.needsConsent && (
+                {inv.event.needsConsent && inv.lines.length > 0 && (
                   <div className="mt-4 grid gap-2 rounded-lg bg-paper px-4 py-3">
                     {inv.lines.map((l) => (
                       <ConsentTick

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { fromCents, toCents } from "../money";
 import { getInvoice } from "../paypal/rest";
+import { reconcile } from "../payments/reconcile";
 import { runPayPalTool } from "../paypal/toolkit";
 import { createGatedPayPal } from "./gate";
 import type { PaymentPlanPayload } from "../agent/parent";
@@ -247,6 +248,15 @@ async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayloa
     }),
     db.enrolment.updateMany({ where: { eventId: inv.eventId, studentId: { in: payload.studentIds } }, data: { attending: false } }),
   ]);
+  // PayPal takes a few seconds to attach a refund to the invoice; wait for it so the
+  // ledger and the family page don't briefly show the money as still paid.
+  if (plan.refund > 0) {
+    const expected = payload.refundedSoFar + plan.refund;
+    for (let i = 0; i < 8; i++) {
+      if (reconcile(await getInvoice(paypalId)).amountRefunded >= expected) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
   await syncInvoice(inv.id);
 }
 
