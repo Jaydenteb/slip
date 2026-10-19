@@ -6,6 +6,13 @@ import { parseEventDescription, type ParsedEvent } from "@/lib/events/parse";
 import { proposeInvoiceBatch, saveEvent } from "@/lib/events/service";
 import { approveAndExecute, rejectApproval } from "@/lib/executor/run";
 import { syncOpenInvoices } from "@/lib/payments/sync";
+import { headers } from "next/headers";
+import { allow } from "@/lib/agent/rate-limit";
+import { db } from "@/lib/db";
+import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { askLedger } from "@/lib/ledger/ask";
+import type { LedgerQuery } from "@/lib/ledger/query";
+import { loadLedgerRows } from "@/lib/ledger/rows";
 
 // Demo build: there is no login, and the office is "the office". A real deployment
 // would check the signed-in staff member here before every action.
@@ -79,5 +86,33 @@ export async function syncEventAction(eventId: string): Promise<ActionResult<{ c
     return { ok: false, error: err instanceof Error ? err.message : "Couldn't reach PayPal." };
   } finally {
     revalidatePath(`/office/events/${eventId}`);
+  }
+}
+
+export async function askLedgerAction(question: string): Promise<ActionResult<LedgerQuery>> {
+  const q = question.trim();
+  if (!q) return { ok: false, error: "Ask a question first." };
+  if (q.length > 300) return { ok: false, error: "Keep it under 300 characters." };
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  if (!allow(`ledger:${ip}`, 20, 10 * 60_000) || !allow("global", 400, 60 * 60_000)) {
+    return { ok: false, error: "Slip needs a breather. Try again in a few minutes." };
+  }
+  try {
+    const rows = await loadLedgerRows(DEMO_SCHOOL_ID);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" });
+    const query = await askLedger(q, rows, today);
+    await db.agentAction.create({
+      data: {
+        schoolId: DEMO_SCHOOL_ID,
+        actor: "office-agent",
+        action: "ledger.asked",
+        input: { question: q },
+        output: { explanation: query.explanation },
+      },
+    });
+    return { ok: true, data: query };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: "Slip couldn't work that out just now. Try asking another way." };
   }
 }

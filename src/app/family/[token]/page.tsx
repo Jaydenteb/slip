@@ -76,6 +76,8 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
             const paid = toCents(inv.amountPaid);
             const owing = total - paid;
             const fee = inv.event.feeItems[0];
+            const plan = (inv.plan as { instalments?: { dueOn: string; amount: string }[] } | null)?.instalments ?? null;
+            const next = plan ? nextInstalment(plan, paid) : null;
             const s = invoiceStatus[inv.status];
             return (
               <Card key={inv.id} className="p-5">
@@ -102,7 +104,12 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
                       <span className="font-medium tabular-nums">{formatMoney(paid, currency)}</span>
                       <span className="text-ink-soft"> of {formatMoney(total, currency)}</span>
                     </p>
-                    {owing > 0 && inv.minimumPayment && paid === 0 && fee?.depositDueOn && (
+                    {owing > 0 && next && (
+                      <p className="text-ink-soft">
+                        Next payment {formatMoney(next.amount, currency)} by {formatDay(new Date(`${next.dueOn}T00:00:00Z`))}
+                      </p>
+                    )}
+                    {owing > 0 && !plan && inv.minimumPayment && paid === 0 && fee?.depositDueOn && (
                       <p className="text-ink-soft">
                         Deposit {formatMoney(toCents(inv.minimumPayment), currency)} by {formatDay(fee.depositDueOn)}
                       </p>
@@ -120,11 +127,11 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
                     </a>
                   )}
                 </div>
-                {Array.isArray((inv.plan as { instalments?: unknown } | null)?.instalments) && (
+                {plan && (
                   <div className="mt-4 rounded-lg border border-brand/20 bg-brand-tint/40 px-4 py-3 text-sm">
                     <p className="font-medium text-brand-strong">Your payment plan</p>
                     <ul className="mt-1 grid gap-0.5 text-ink-soft">
-                      {(inv.plan as { instalments: { dueOn: string; amount: string }[] }).instalments.map((p) => (
+                      {plan.map((p) => (
                         <li key={p.dueOn} className="flex justify-between tabular-nums">
                           <span>{formatDay(new Date(`${p.dueOn}T00:00:00Z`))}</span>
                           <span>{formatMoney(toCents(p.amount), currency)}</span>
@@ -158,4 +165,15 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
       </div>
     </>
   );
+}
+
+// The first instalment not yet covered by what's been paid, with what's left of it.
+function nextInstalment(plan: { dueOn: string; amount: string }[], paidCents: number) {
+  let covered = paidCents;
+  for (const p of plan) {
+    const amount = toCents(p.amount);
+    if (covered < amount) return { dueOn: p.dueOn, amount: amount - covered };
+    covered -= amount;
+  }
+  return null;
 }

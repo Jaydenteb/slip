@@ -19,7 +19,9 @@
     "try-chat": "tsx --env-file=.env scripts/try-chat.ts",
     "approve": "tsx --env-file=.env scripts/approve.ts",
     "test:db": "node --env-file-if-exists=.env --import tsx --test --test-concurrency=1 \"tests/db/**/*.test.ts\"",
-    "check": "npm run typecheck && npm run lint && npm test && npm run test:db"
+    "check": "npm run typecheck && npm run lint && npm test && npm run test:db",
+    "try-ledger": "tsx --env-file=.env scripts/try-ledger.ts",
+    "screenshots": "tsx scripts/screenshots.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -36,6 +38,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

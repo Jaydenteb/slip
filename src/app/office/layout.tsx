@@ -16,6 +16,7 @@ export default function OfficeLayout({ children }: LayoutProps<"/office">) {
           </Link>
           <span className="hidden text-sm text-ink-faint sm:inline">Bellbird Primary · School office</span>
           <nav className="ml-auto flex items-center gap-1 text-sm">
+            <NavLink href="/office/ledger">Ledger</NavLink>
             <NavLink href="/office/events">Events</NavLink>
             <NavLink href="/office/approvals">
               Approvals
