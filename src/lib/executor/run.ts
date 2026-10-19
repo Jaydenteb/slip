@@ -2,9 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { fromCents, toCents } from "../money";
 import { getInvoice } from "../paypal/rest";
+import { syncOpenInvoices } from "../payments/sync";
 import { runPayPalTool } from "../paypal/toolkit";
 import { createGatedPayPal } from "./gate";
 import type { PaymentPlanPayload } from "../agent/parent";
+import type { ReminderBatchPayload } from "../reminders/service";
 
 // The executor: runs an approval item's actions after a person approves it. This is
 // the only code that moves money or contacts parents, and it only does so through
@@ -51,6 +53,9 @@ export async function approveAndExecute(approvalItemId: string, decidedBy: strin
         break;
       case "PAYMENT_PLAN":
         await applyPaymentPlan(item.id, item.payload as unknown as PaymentPlanPayload);
+        break;
+      case "REMINDER_BATCH":
+        await sendReminderBatch(item.id, item.payload as unknown as ReminderBatchPayload);
         break;
       case "HARDSHIP_FLAG":
         // Nothing to run: approving a hardship flag just marks it as handled by a person.
@@ -127,6 +132,39 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
     throw new Error(`${failures.length} of ${invoices.length} invoices didn't send. Approve again to retry them.\n${failures.join("\n")}`);
   }
   await db.event.update({ where: { id: event.id }, data: { status: "OPEN" } });
+}
+
+async function sendReminderBatch(approvalItemId: string, payload: ReminderBatchPayload) {
+  // Approving again after a partial failure only retries the families that didn't get one.
+  const done = await db.agentAction.findMany({
+    where: { approvalItemId, action: "paypal.send_invoice_reminder", ok: true },
+    select: { input: true },
+  });
+  const alreadySent = new Set(done.map((d) => (d.input as { invoice_id?: string } | null)?.invoice_id));
+  // Catch up with PayPal first, so nobody who has just paid gets chased.
+  await syncOpenInvoices({ eventId: payload.eventId, maxAgeMs: 60_000 });
+  const invoices = await db.invoice.findMany({
+    where: { id: { in: payload.reminders.map((r) => r.invoiceId) }, eventId: payload.eventId },
+    include: { family: true },
+  });
+  const failures: string[] = [];
+
+  await inBatches(invoices, 4, async (inv) => {
+    const reminder = payload.reminders.find((r) => r.invoiceId === inv.id);
+    const note = reminder && payload.notes[reminder.tier];
+    // Paid in the meantime, or cancelled: no reminder.
+    if (!reminder || !note || !inv.paypalInvoiceId || alreadySent.has(inv.paypalInvoiceId)) return;
+    if (!["SENT", "PARTIALLY_PAID"].includes(inv.status) || toCents(inv.amountPaid) >= toCents(inv.total)) return;
+    try {
+      await gated(approvalItemId, "send_invoice_reminder", { invoice_id: inv.paypalInvoiceId, subject: note.subject, note: note.note });
+    } catch (err) {
+      failures.push(`${inv.family.familyName}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  if (failures.length) {
+    throw new Error(`${failures.length} of ${invoices.length} reminders didn't send. Approve again to retry them.\n${failures.join("\n")}`);
+  }
 }
 
 type InvoiceForPayPal = Prisma.InvoiceGetPayload<{ include: { family: true; lines: true } }>;

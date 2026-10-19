@@ -34,7 +34,8 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
    - password: `M'=4i+=f`
 
    This is a PayPal sandbox test account, not a real one.
-7. **Watch the ledger.** Open **Ledger**. The PayPal webhook updates the row and the changed cells flash. Then try **Ask the ledger**:
+7. **Chase the rest, kindly.** Back on the event page, click **Draft reminders**. Slip picks who to remind and how firmly, and leaves out anyone who asked for support or was reminded in the last week. It drafts the wording, and the office reads it in **Approvals** before PayPal sends anything.
+8. **Watch the ledger.** Open **Ledger**. The PayPal webhook updates the row and the changed cells flash. Then try **Ask the ledger**:
    - "Who in 4B hasn't paid the camp deposit yet?"
    - "Who owes more than $200?"
    - "Group by class with totals"
@@ -50,6 +51,7 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
 | PayPal Agent Toolkit: `create_invoice`, `send_invoice`, `update_invoicing`, `record_payment_for_invoice` and more | [src/lib/paypal/toolkit.ts](src/lib/paypal/toolkit.ts) (`runPayPalTool` checks the arguments against each tool's own schema) |
 | Sending an approved invoice batch: one invoice per family, partial payments with a minimum | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`sendInvoiceBatch`, `invoiceFields`) |
 | Applying an approved payment plan to a live invoice | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`applyPaymentPlan`) |
+| Sending an approved batch of payment reminders (`send_invoice_reminder`), syncing first so nobody who just paid is chased | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`sendReminderBatch`) |
 | Invoicing REST v2: reading an invoice for Sync, and verifying webhook signatures | [src/lib/paypal/rest.ts](src/lib/paypal/rest.ts) (`getInvoice`, `verifyWebhookSignature`) |
 | Webhook receiver: verified, de-duplicated by event id, then a sync | [src/app/api/webhooks/paypal/route.ts](src/app/api/webhooks/paypal/route.ts) |
 | Matching payments to the ledger (PayPal and cash; idempotent on PayPal's `payment_id`) | [src/lib/payments/reconcile.ts](src/lib/payments/reconcile.ts), [src/lib/payments/sync.ts](src/lib/payments/sync.ts) |
@@ -64,6 +66,7 @@ All calls use Claude Opus 5.5 (`claude-opus-5-5`) through the official Anthropic
 |---|---|---|
 | Plain-English event setup | Structured outputs with a zod schema. Returns fees, deposits, dates, classes, plus the assumptions and questions it has | [src/lib/events/parse.ts](src/lib/events/parse.ts) |
 | Parent chat | The SDK's tool runner with three tools, all scoped to one family: read the family overview, request a payment plan, flag for support | [src/lib/agent/parent.ts](src/lib/agent/parent.ts) |
+| Payment reminders | Plain rules in [select.ts](src/lib/reminders/select.ts) decide who gets a reminder and how firm it is: a friendly nudge, overdue, or final. Families who asked for support are never chased. Claude writes one note per tier with structured outputs, and every note offers help in confidence | [src/lib/reminders/draft.ts](src/lib/reminders/draft.ts), [src/lib/reminders/service.ts](src/lib/reminders/service.ts) |
 | Ask the ledger | Structured outputs that return a ledger query. [toGridState](src/lib/ledger/query.ts) converts it into AG Grid filter, column and row-grouping state | [src/lib/ledger/ask.ts](src/lib/ledger/ask.ts), [src/app/office/ledger/ledger-grid.tsx](src/app/office/ledger/ledger-grid.tsx) |
 
 ## The approval gate: why the AI can't move money
@@ -72,12 +75,13 @@ All calls use Claude Opus 5.5 (`claude-opus-5-5`) through the official Anthropic
 - **Every PayPal write goes through one gate,** in [src/lib/executor/gate.ts](src/lib/executor/gate.ts). `createGatedPayPal` refuses to call PayPal unless:
   - a person has approved the item,
   - the item has been claimed for execution, and
-  - the tool is on the allow-list for that kind of approval (`ALLOWED_TOOLS`). An invoice batch can create and send invoices; a payment plan can only update one; a hardship flag can call nothing.
+  - the tool is on the allow-list for that kind of approval (`ALLOWED_TOOLS`). An invoice batch can create and send invoices; a payment plan can only update one; a reminder batch can only send reminders; a hardship flag can call nothing.
 - **Approving runs the executor, not the model.** See `approveAndExecute` in [src/lib/executor/run.ts](src/lib/executor/run.ts). Claiming an approval is atomic, so a double-click can't send a batch twice.
 - **Every PayPal call is audited,** whether it succeeds or fails, and listed on the **Activity** page.
 
 Tests check all of this:
 - [src/lib/executor/gate.test.ts](src/lib/executor/gate.test.ts): the gate refuses with no approval, a pending approval, a rejected approval, or a tool that isn't allowed, and it audits failures.
+- [src/lib/reminders/select.test.ts](src/lib/reminders/select.test.ts): who gets a reminder and how firm it is, including that families who asked for support are never chased.
 - [tests/db/parent-scope.test.ts](tests/db/parent-scope.test.ts): one family's chat can't see or act on another family's invoices, and a plan request makes no PayPal call.
 
 ## AG Grid

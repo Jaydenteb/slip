@@ -8,6 +8,7 @@ import { approveAction, rejectAction } from "../actions";
 const approveLabel: Partial<Record<ApprovalKind, string>> = {
   INVOICE_BATCH: "Approve & send",
   PAYMENT_PLAN: "Approve plan",
+  REMINDER_BATCH: "Approve & send reminders",
   HARDSHIP_FLAG: "Mark as handled",
 };
 

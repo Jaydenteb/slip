@@ -21,6 +21,7 @@
     "test:db": "node --env-file-if-exists=.env --import tsx --test --test-concurrency=1 \"tests/db/**/*.test.ts\"",
     "check": "npm run typecheck && npm run lint && npm test && npm run test:db",
     "try-ledger": "tsx --env-file=.env scripts/try-ledger.ts",
+    "try-reminders": "tsx --env-file=.env scripts/try-reminders.ts",
     "screenshots": "tsx scripts/screenshots.ts"
   },
   "dependencies": {

@@ -3,6 +3,8 @@ import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
 import type { InvoiceBatchPayload } from "@/lib/executor/run";
+import type { ReminderBatchPayload } from "@/lib/reminders/service";
+import { TIER_LABEL, type ReminderTier } from "@/lib/reminders/select";
 import { formatMoment } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
 import { approvalKind, approvalStatus } from "@/lib/status";
@@ -62,6 +64,7 @@ async function Approvals() {
                 <pre className="mt-4 overflow-x-auto rounded-lg bg-danger-tint/60 p-3 text-xs whitespace-pre-wrap text-danger">{item.error}</pre>
               )}
               {item.kind === "INVOICE_BATCH" && <InvoiceBatchDetail payload={item.payload as InvoiceBatchPayload} />}
+              {item.kind === "REMINDER_BATCH" && <ReminderBatchDetail payload={item.payload as unknown as ReminderBatchPayload} />}
             </Card>
           ))
         )}
@@ -130,5 +133,71 @@ async function InvoiceBatchDetail({ payload }: { payload: InvoiceBatchPayload })
         </table>
       </div>
     </details>
+  );
+}
+
+const TIER_TONE: Record<ReminderTier, "info" | "waiting" | "danger"> = { gentle: "info", overdue: "waiting", final: "danger" };
+
+function ReminderBatchDetail({ payload }: { payload: ReminderBatchPayload }) {
+  const tiers = (Object.keys(TIER_LABEL) as ReminderTier[]).filter((t) => payload.notes[t]);
+  return (
+    <div className="mt-4 grid gap-3">
+      {tiers.map((t) => {
+        const note = payload.notes[t]!;
+        const families = payload.reminders.filter((r) => r.tier === t);
+        return (
+          <div key={t} className="rounded-lg border border-line bg-paper px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+              <Badge tone={TIER_TONE[t]}>{TIER_LABEL[t]}</Badge>
+              <span>
+                {families.length} {families.length === 1 ? "family" : "families"}
+              </span>
+            </div>
+            <p className="mt-2 text-sm font-medium">{note.subject}</p>
+            <p className="mt-1 text-sm whitespace-pre-line text-ink-soft">{note.note}</p>
+          </div>
+        );
+      })}
+      <details className="group rounded-lg border border-line">
+        <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium text-ink-soft hover:text-ink">
+          <span className="group-open:hidden">
+            Show who gets one{payload.skipped.length > 0 && ` and who's left out`}
+          </span>
+          <span className="hidden group-open:inline">Hide families</span>
+        </summary>
+        <div className="overflow-x-auto border-t border-line">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-ink-faint">
+              <tr>
+                <th className="px-4 py-2 font-medium">Family</th>
+                <th className="px-4 py-2 font-medium">Reminder</th>
+                <th className="px-4 py-2 text-right font-medium">Owing</th>
+                <th className="px-4 py-2 font-medium">Why</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {payload.reminders.map((r) => (
+                <tr key={r.invoiceId}>
+                  <td className="px-4 py-2 font-medium">{r.familyName}</td>
+                  <td className="px-4 py-2">
+                    <Badge tone={TIER_TONE[r.tier]}>{TIER_LABEL[r.tier]}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">{formatMoney(toCents(r.owing))}</td>
+                  <td className="px-4 py-2 text-ink-soft">{r.reason}</td>
+                </tr>
+              ))}
+              {payload.skipped.map((s, i) => (
+                <tr key={`${s.familyName}-${i}`} className="text-ink-faint">
+                  <td className="px-4 py-2 font-medium">{s.familyName}</td>
+                  <td className="px-4 py-2">Left out</td>
+                  <td className="px-4 py-2" />
+                  <td className="px-4 py-2">{s.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
   );
 }

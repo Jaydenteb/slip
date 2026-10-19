@@ -9,6 +9,7 @@ import { formatMoney, toCents } from "@/lib/money";
 import { invoiceStatus } from "@/lib/status";
 import { Badge, Card, Skeleton } from "@/components/ui";
 import { DraftInvoicesButton } from "./draft-invoices-button";
+import { DraftRemindersButton } from "./draft-reminders-button";
 import { SyncButton } from "./sync-button";
 import { syncOpenInvoices } from "@/lib/payments/sync";
 
@@ -45,9 +46,12 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
   const uninvoiced = new Set(
     event.enrolments.filter((e) => e.attending && !invoicedFamilies.has(e.student.familyId)).map((e) => e.student.familyId),
   );
-  const pendingBatch = await db.approvalItem.findFirst({
-    where: { eventId: event.id, kind: "INVOICE_BATCH", status: { in: ["PENDING", "EXECUTING", "FAILED"] } },
+  const waiting = await db.approvalItem.findMany({
+    where: { eventId: event.id, kind: { in: ["INVOICE_BATCH", "REMINDER_BATCH"] }, status: { in: ["PENDING", "EXECUTING", "FAILED"] } },
+    select: { kind: true },
   });
+  const pendingBatch = waiting.some((w) => w.kind === "INVOICE_BATCH");
+  const pendingReminders = waiting.some((w) => w.kind === "REMINDER_BATCH");
 
   const byClass = new Map<string, number>();
   for (const e of event.enrolments) byClass.set(e.student.classroom.name, (byClass.get(e.student.classroom.name) ?? 0) + 1);
@@ -55,6 +59,7 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
   const live = event.invoices.filter((i) => i.status !== "PROPOSED");
   const billed = live.reduce((n, i) => n + toCents(i.total), 0);
   const paid = live.reduce((n, i) => n + toCents(i.amountPaid), 0);
+  const anyOwing = live.some((i) => ["SENT", "PARTIALLY_PAID"].includes(i.status) && toCents(i.amountPaid) < toCents(i.total));
 
   return (
     <>
@@ -71,10 +76,16 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
         </div>
         <div className="flex flex-wrap items-center gap-3">
         {live.length > 0 && <SyncButton eventId={event.id} />}
+        {anyOwing && !pendingReminders && <DraftRemindersButton eventId={event.id} />}
         {uninvoiced.size > 0 && !pendingBatch && <DraftInvoicesButton eventId={event.id} families={uninvoiced.size} />}
         {pendingBatch && (
           <Link href="/office/approvals" className="text-sm font-medium text-waiting hover:underline">
             Invoices waiting for your approval →
+          </Link>
+        )}
+        {pendingReminders && (
+          <Link href="/office/approvals" className="text-sm font-medium text-waiting hover:underline">
+            Reminders waiting for your approval →
           </Link>
         )}
         </div>

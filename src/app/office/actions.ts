@@ -13,6 +13,7 @@ import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
 import { askLedger } from "@/lib/ledger/ask";
 import type { LedgerQuery } from "@/lib/ledger/query";
 import { loadLedgerRows } from "@/lib/ledger/rows";
+import { proposeReminderBatch } from "@/lib/reminders/service";
 
 // Demo build: there is no login, and the office is "the office". A real deployment
 // would check the signed-in staff member here before every action.
@@ -51,6 +52,22 @@ export async function proposeInvoicesAction(eventId: string): Promise<ActionResu
     await proposeInvoiceBatch(eventId);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Couldn't draft the invoices." };
+  }
+  revalidatePath(`/office/events/${eventId}`);
+  redirect("/office/approvals");
+}
+
+export async function proposeRemindersAction(eventId: string): Promise<ActionResult> {
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  if (!allow(`reminders:${ip}`, 10, 10 * 60_000) || !allow("global", 400, 60 * 60_000)) {
+    return { ok: false, error: "Slip needs a breather. Try again in a few minutes." };
+  }
+  try {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" });
+    await proposeReminderBatch(eventId, today);
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: err instanceof Error ? err.message : "Couldn't draft the reminders." };
   }
   revalidatePath(`/office/events/${eventId}`);
   redirect("/office/approvals");
