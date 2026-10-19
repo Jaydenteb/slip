@@ -13,6 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Absolute URLs for the link-preview image. Render sets RENDER_EXTERNAL_URL.
+  metadataBase: new URL(process.env.RENDER_EXTERNAL_URL ?? "http://localhost:3000"),
   title: { default: "Slip", template: "%s · Slip" },
   description: "An AI agent that runs school field-trip and camp payments on PayPal.",
 };

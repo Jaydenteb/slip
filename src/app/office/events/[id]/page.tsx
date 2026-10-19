@@ -148,12 +148,12 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-xs text-ink-faint">
               <tr>
-                <th className="px-5 py-3 font-medium">Family</th>
-                <th className="px-5 py-3 font-medium">Students</th>
-                <th className="px-5 py-3 text-right font-medium">Total</th>
-                <th className="px-5 py-3 text-right font-medium">Paid</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3" />
+                <th className="px-3 py-3 sm:px-5 font-medium">Family</th>
+                <th className="hidden px-3 py-3 sm:px-5 font-medium sm:table-cell">Students</th>
+                <th className="hidden px-3 py-3 sm:px-5 text-right font-medium sm:table-cell">Total</th>
+                <th className="px-3 py-3 sm:px-5 text-right font-medium">Paid</th>
+                <th className="px-3 py-3 sm:px-5 font-medium">Status</th>
+                <th className="px-3 py-3 sm:px-5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -161,8 +161,14 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
                 const s = invoiceStatus[inv.status];
                 return (
                   <tr key={inv.id}>
-                    <td className="px-5 py-3 font-medium">{inv.family.familyName}</td>
-                    <td className="px-5 py-3 text-ink-soft">
+                    <td className="px-3 py-3 sm:px-5 font-medium">
+                      {inv.family.familyName}
+                      {/* On a phone the students and total fold in under the family name. */}
+                      <span className="block text-xs font-normal text-ink-faint sm:hidden">
+                        {inv.lines.map((l) => l.student.firstName).join(", ")} · {formatMoney(toCents(inv.total), currency)}
+                      </span>
+                    </td>
+                    <td className="hidden px-3 py-3 sm:px-5 text-ink-soft sm:table-cell">
                       {[
                         ...inv.lines.map((l) => l.student.firstName),
                         ...event.enrolments
@@ -170,17 +176,17 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
                           .map((e) => `${e.student.firstName} (not going)`),
                       ].join(", ")}
                     </td>
-                    <td className="px-5 py-3 text-right tabular-nums">{formatMoney(toCents(inv.total), currency)}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">
+                    <td className="hidden px-3 py-3 sm:px-5 text-right tabular-nums sm:table-cell">{formatMoney(toCents(inv.total), currency)}</td>
+                    <td className="px-3 py-3 sm:px-5 text-right tabular-nums">
                       {formatMoney(toCents(inv.amountPaid), currency)}
                       {toCents(inv.amountRefunded) > 0 && (
                         <span className="block text-xs text-ink-faint">{formatMoney(toCents(inv.amountRefunded), currency)} refunded</span>
                       )}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-3 sm:px-5">
                       <Badge tone={s.tone}>{s.label}</Badge>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="px-3 py-3 sm:px-5 text-right">
                       {["SENT", "PARTIALLY_PAID", "PAID"].includes(inv.status) && inv.lines.length > 0 && (
                         <WithdrawButton
                           invoiceId={inv.id}

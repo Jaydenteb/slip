@@ -146,7 +146,7 @@ export function NewEventFlow() {
                 const setFee = (patch: Partial<typeof fee>) =>
                   setEvent({ ...event, fees: event.fees.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
                 return (
-                  <div key={i} className="grid gap-3 rounded-lg border border-line bg-paper p-3 sm:grid-cols-5">
+                  <div key={i} className="grid gap-3 rounded-lg border border-line bg-paper p-3 sm:grid-cols-3">
                     <Field label="For">
                       <Input value={fee.label} onChange={(v) => setFee({ label: v })} />
                     </Field>
@@ -218,7 +218,7 @@ export function NewEventFlow() {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20";
+  "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20";
 
 function Input({ value, onChange, type = "text" }: { value: string; onChange: (v: string) => void; type?: string }) {
   return <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className={`${inputClass} h-10`} />;
@@ -226,7 +226,7 @@ function Input({ value, onChange, type = "text" }: { value: string; onChange: (v
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <label className="grid gap-1.5">
+    <label className="grid min-w-0 gap-1.5">
       <span className="text-xs font-medium text-ink-soft">
         {label}
         {hint && <span className="font-normal text-ink-faint"> · {hint}</span>}

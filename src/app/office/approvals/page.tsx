@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { clsx } from "clsx";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
@@ -6,7 +7,7 @@ import type { InvoiceBatchPayload } from "@/lib/executor/run";
 import type { ReminderBatchPayload } from "@/lib/reminders/service";
 import type { WithdrawalPayload } from "@/lib/withdrawals/service";
 import { TIER_LABEL, type ReminderTier } from "@/lib/reminders/select";
-import { formatMoment } from "@/lib/format";
+import { formatMoment, isRecent } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
 import { approvalKind, approvalStatus } from "@/lib/status";
 import { Badge, Card, EmptyState, PageHeader, Skeleton } from "@/components/ui";
@@ -43,8 +44,8 @@ async function Approvals() {
   ]);
 
   return (
-    <div className="grid gap-10">
-      <section className="grid gap-4">
+    <div className="grid grid-cols-1 gap-10">
+      <section className="grid grid-cols-1 gap-4">
         {open.length === 0 ? (
           <EmptyState title="Nothing waiting">When Slip drafts invoices, payment plans or refunds, they&rsquo;ll appear here.</EmptyState>
         ) : (
@@ -77,7 +78,14 @@ async function Approvals() {
           <h2 className="mb-3 text-sm font-semibold text-ink-soft">Recently decided</h2>
           <Card className="divide-y divide-line">
             {decided.map((item) => (
-              <div key={item.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+              <div
+                key={item.id}
+                className={clsx(
+                  "flex flex-wrap items-center gap-3 px-5 py-3 text-sm",
+                  // Just decided: glow once, so the office sees where it went.
+                  isRecent(item.decidedAt, 20_000) && "animate-glow",
+                )}
+              >
                 <Badge tone={approvalStatus[item.status].tone}>{approvalStatus[item.status].label}</Badge>
                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
                 {item.decidedAt && <span className="text-ink-faint">{formatMoment(item.decidedAt)}</span>}

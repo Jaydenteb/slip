@@ -25,3 +25,8 @@ export function formatMoment(d: Date) {
     timeZone: "Australia/Melbourne",
   });
 }
+
+// Whether something happened in the last `ms` milliseconds (e.g. to highlight a fresh result).
+export function isRecent(d: Date | null, ms: number) {
+  return d !== null && Date.now() - d.getTime() < ms;
+}

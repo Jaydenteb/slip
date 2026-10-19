@@ -1,0 +1,1 @@
+Slip: an AI agent that runs school camp and field-trip payments on PayPal, shown beside its live office ledger

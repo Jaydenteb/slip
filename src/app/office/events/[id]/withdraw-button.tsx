@@ -15,7 +15,7 @@ export function WithdrawButton({ invoiceId, students }: { invoiceId: string; stu
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-sm text-ink-soft hover:text-ink">
+      <button type="button" onClick={() => setOpen(true)} className="text-sm whitespace-nowrap text-ink-soft hover:text-ink">
         Withdraw…
       </button>
     );

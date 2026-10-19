@@ -239,6 +239,7 @@ export type ChatTurn = { from: "parent" | "slip"; text: string; actions: string[
 const ACTION_LABEL: Record<string, string> = {
   request_payment_plan: "Asked the office to approve a payment plan",
   flag_for_support: "Let the office know privately",
+  request_withdrawal: "Asked the office to approve a withdrawal",
 };
 
 // Turns the stored API conversation into what the parent sees.

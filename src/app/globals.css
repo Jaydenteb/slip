@@ -39,6 +39,32 @@
   --color-info-tint: var(--info-tint);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --animate-rise: rise 260ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  --animate-glow: glow 2.4s ease-out both;
+}
+
+/* Motion is small and quick: new things ease in, fresh results glow once. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes glow {
+  from {
+    background-color: var(--brand-tint);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }
 
 body {

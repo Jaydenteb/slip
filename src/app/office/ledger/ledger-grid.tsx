@@ -92,13 +92,14 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
     () => [
       col("student", { pinned: "left", minWidth: 170 }),
       col("className", { width: 130 }),
+      // Status early: it's what the office scans for.
+      col("status", { width: 165, cellRenderer: StatusCell, enableCellChangeFlash: true }),
       col("year", { width: 80, hide: true }),
       col("family", { width: 120 }),
-      col("event", { minWidth: 200, flex: 1 }),
+      col("event", { minWidth: 180, flex: 1 }),
       col("amount", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM }),
       col("paid", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
       col("owing", { width: 145, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
-      col("status", { width: 175, cellRenderer: StatusCell, enableCellChangeFlash: true }),
       col("depositPaid", { width: 130, enableCellChangeFlash: true }),
       col("onPlan", { width: 130, cellRenderer: FlagCell }),
       col("needsSupport", { width: 110, cellRenderer: FlagCell }),

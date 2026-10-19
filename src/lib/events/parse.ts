@@ -41,7 +41,8 @@ const SYSTEM = `You help a primary school office set up payments for field trips
 Turn the office's description into the event details. Only use what they wrote: never invent a fee, a date or a class.
 Dates: resolve to the next occurrence on or after today unless a year is given, and record that as an assumption.
 Health and medical information is never collected through this system. If the description mentions medical forms, treat it as needing consent and add an assumption that medical details are collected separately by the school.
-Money is in the school's currency; amounts are per student.`;
+Money is in the school's currency; amounts are per student.
+Parents pay with PayPal and give consent by ticking a box on their family page, so the note for parents should ask them to give consent there, never to return a paper or signed form.`;
 
 export async function parseEventDescription(text: string, today: string): Promise<ParsedEvent> {
   const response = await claude().beta.messages.parse({
