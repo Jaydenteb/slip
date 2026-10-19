@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model School {
+  id          String      @id @default(cuid())
+  name        String
+  email       String
+  currency    String      @default("AUD")
+  countryCode String      @default("AU")
+  classrooms  Classroom[]
+  families    Family[]
+  events      Event[]
+  createdAt   DateTime    @default(now())
+}
+
+model Classroom {
+  id       String    @id @default(cuid())
+  schoolId String
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String // e.g. "4B"
+  year     Int
+  students Student[]
+}
+
+model Family {
+  id          String       @id @default(cuid())
+  schoolId    String
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  familyName  String
+  contactName String
+  email       String?
+  // Secret for the parent's family page link. Parent tools are scoped to this.
+  linkToken   String       @unique
+  students    Student[]
+  invoices    Invoice[]
+  chatThreads ChatThread[]
+}
+
+model Student {
+  id          String       @id @default(cuid())
+  familyId    String
+  family      Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  classroomId String
+  classroom   Classroom    @relation(fields: [classroomId], references: [id])
+  firstName   String
+  lastName    String
+  enrolments  Enrolment[]
+  lines       InvoiceLine[]
+}
+
+enum EventStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+model Event {
+  id             String      @id @default(cuid())
+  schoolId       String
+  school         School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  location       String?
+  startsOn       DateTime?
+  endsOn         DateTime?
+  // The office's original plain-English description, kept for the parent agent's context.
+  sourceText     String
+  status         EventStatus @default(DRAFT)
+  needsConsent   Boolean     @default(true)
+  // Classes this event applies to.
+  classroomIds   String[]
+  feeItems       FeeItem[]
+  enrolments     Enrolment[]
+  invoices       Invoice[]
+  createdAt      DateTime    @default(now())
+}
+
+model FeeItem {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  label     String // "Camp fee"
+  amount    Decimal  @db.Decimal(10, 2)
+  // Minimum first payment (the deposit), if partial payments are allowed.
+  depositAmount Decimal? @db.Decimal(10, 2)
+  depositDueOn  DateTime?
+  dueOn     DateTime?
+}
+
+// A student on an event: consent and attendance live here, never medical details.
+model Enrolment {
+  id            String    @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  consentGiven  Boolean   @default(false)
+  formReturned  Boolean   @default(false)
+  attending     Boolean   @default(true)
+
+  @@unique([eventId, studentId])
+}
+
+enum InvoiceStatus {
+  PROPOSED // drafted by Slip, waiting for approval
+  SENT
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+// One invoice per family per event: siblings are combined into lines.
+model Invoice {
+  id               String        @id @default(cuid())
+  eventId          String
+  event            Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  familyId         String
+  family           Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  paypalInvoiceId  String?       @unique
+  paypalPayerUrl   String?
+  status           InvoiceStatus @default(PROPOSED)
+  total            Decimal       @db.Decimal(10, 2)
+  amountPaid       Decimal       @default(0) @db.Decimal(10, 2)
+  minimumPayment   Decimal?      @db.Decimal(10, 2)
+  lastSyncedAt     DateTime?
+  lines            InvoiceLine[]
+  payments         Payment[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([eventId, familyId])
+}
+
+model InvoiceLine {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+  label     String
+  amount    Decimal @db.Decimal(10, 2)
+}
+
+enum PaymentMethod {
+  PAYPAL
+  CASH
+  BANK_TRANSFER
+  OTHER
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // PayPal's id for the payment on the invoice; used to avoid double-counting sync + webhook.
+  paypalPaymentId String?       @unique
+  method          PaymentMethod
+  amount          Decimal       @db.Decimal(10, 2)
+  paidAt          DateTime
+  note            String?
+}
+
+enum ApprovalKind {
+  INVOICE_BATCH
+  PAYMENT_PLAN
+  REMINDER_BATCH
+  REFUND
+  CASH_PAYMENT
+  HARDSHIP_FLAG
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  // Claimed by the executor (APPROVED -> EXECUTING in one conditional update), so a
+  // double-click can't run the same approval twice.
+  EXECUTING
+  EXECUTED
+  REJECTED
+  FAILED
+}
+
+// Everything that reaches parents or moves money waits here for a person.
+model ApprovalItem {
+  id          String         @id @default(cuid())
+  schoolId    String
+  kind        ApprovalKind
+  status      ApprovalStatus @default(PENDING)
+  title       String
+  // Plain-English summary written by the agent for the person approving.
+  summary     String
+  // The exact actions the executor will run on approval (validated before execution).
+  payload     Json
+  proposedBy  String // "office-agent" | "parent-agent" | "office"
+  familyId    String?
+  eventId     String?
+  decidedBy   String?
+  decidedAt   DateTime?
+  error       String?
+  actions     AgentAction[]
+  createdAt   DateTime       @default(now())
+}
+
+// Audit log: every PayPal call, every proposal, every decision.
+model AgentAction {
+  id             String        @id @default(cuid())
+  schoolId       String
+  actor          String // "office-agent" | "parent-agent" | "executor" | "office" | "webhook" | "sync"
+  action         String // e.g. "paypal.create_invoice"
+  approvalItemId String?
+  approvalItem   ApprovalItem? @relation(fields: [approvalItemId], references: [id])
+  input          Json?
+  output         Json?
+  ok             Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+}
+
+model ChatThread {
+  id        String   @id @default(cuid())
+  // null = office chat; set = a parent's chat
+  familyId  String?
+  family    Family?  @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WebhookEvent {
+  // PayPal's event id: the primary key gives us de-duplication for free.
+  id         String   @id
+  eventType  String
+  resourceId String?
+  payload    Json
+  receivedAt DateTime @default(now())
+}

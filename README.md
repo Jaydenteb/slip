@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Slip
 
-## Getting Started
+An AI agent that runs school field-trip and camp payments on PayPal. The school office describes an event in plain English. Slip drafts the PayPal invoices, answers parents' questions and proposes payment plans, and keeps the ledger up to date. Every action that reaches a parent or moves money waits for a person to approve it.
 
-First, run the development server:
+> Work in progress for the PayPal "Build what's next with PayPal and AI" hackathon.
+
+## Run it locally
+
+Requires Node 22+ and Docker.
 
 ```bash
+npm install
+cp .env.example .env        # then fill in your PayPal sandbox + Anthropic keys
+docker compose up -d        # local Postgres on port 5433
+npm run db:push
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Tests: `npm test`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How the approval gate works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- The AI models only get **read** tools and **propose** tools. A proposal writes an approval item and nothing else.
+- PayPal's money-moving tools (`create_invoice`, `send_invoice`, `record_payment_for_invoice`, …) run only from the executor. The executor refuses to run without an approval item a person has approved: see [src/lib/executor/gate.ts](src/lib/executor/gate.ts).
+- Every PayPal call is written to an audit log.
 
-## Learn More
+## Built with
 
-To learn more about Next.js, take a look at the following resources:
+- PayPal Invoicing API v2 and the PayPal Agent Toolkit (`@paypal/agent-toolkit`)
+- Claude Opus 5.5 via the Anthropic TypeScript SDK (structured outputs + tool use)
+- AG Grid Community
+- Next.js, Prisma, Postgres, hosted on Render
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT

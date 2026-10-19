@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: slip
+      POSTGRES_PASSWORD: slip
+      POSTGRES_DB: slip
+    ports:
+      - "5433:5432"
+    volumes:
+      - slip-db:/var/lib/postgresql/data
+
+volumes:
+  slip-db:

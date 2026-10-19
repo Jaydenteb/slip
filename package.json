@@ -1,26 +1,42 @@
 {
-  "name": "slip-tmp",
+  "name": "slip",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "spike": "tsx --env-file=.env scripts/spike.ts",
+    "try-parse": "tsx --env-file=.env scripts/try-parse.ts"
   },
   "dependencies": {
-    "next": "16.4.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@paypal/agent-toolkit": "^1.11.0",
+    "@prisma/client": "6.19",
+    "ag-grid-community": "^36.2.0",
+    "ag-grid-react": "^36.2.0",
+    "next": "^16.4.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^18.0.8",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "prisma": "6.19",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
