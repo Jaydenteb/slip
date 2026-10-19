@@ -10,16 +10,25 @@ import {
   type ICellRendererParams,
   type ValueFormatterParams,
 } from "ag-grid-community";
+import { AllEnterpriseModule, LicenseManager } from "ag-grid-enterprise";
 import { clsx } from "clsx";
 import { LEDGER_COLUMNS, type LedgerColumn, type LedgerRow, type LedgerStatus } from "@/lib/ledger/columns";
 import { toGridState } from "@/lib/ledger/query";
 import { Button, Card } from "@/components/ui";
 import { askLedgerAction } from "../actions";
 
-const modules = [AllCommunityModule];
+// Row grouping is an AG Grid Enterprise feature. With a licence key we use Enterprise
+// (rows group by class with subtotals); without one, the free Community edition, where
+// "group by" sorts instead. Judges running it locally without a key still get a full grid.
+const LICENCE = process.env.NEXT_PUBLIC_AG_GRID_LICENSE_KEY;
+// v3 keys carry a product type: only Grid (01) or Grid + Charts (0102) unlock the grid. Anything else
+// (an AG Studio key, say) would just put a watermark on the ledger, so stay on Community instead.
+const LICENCE_TYPE = LICENCE?.match(/\[v3\]_\[(\w+)\]/)?.[1];
+const CAN_GROUP = Boolean(LICENCE) && (LICENCE_TYPE === undefined || LICENCE_TYPE === "01" || LICENCE_TYPE === "0102");
+if (CAN_GROUP) LicenseManager.setLicenseKey(LICENCE!);
+const modules = CAN_GROUP ? [AllEnterpriseModule] : [AllCommunityModule];
 
-// Row grouping is an AG Grid Enterprise feature; without a licence, "group by" sorts instead.
-const CAN_GROUP = false;
+const FILTER = { text: "agTextColumnFilter", number: "agNumberColumnFilter", date: "agDateColumnFilter" } as const;
 
 const theme = themeQuartz.withParams({
   fontFamily: "inherit",
@@ -60,7 +69,9 @@ const money = (p: ValueFormatterParams<LedgerRow, number>) =>
   p.value == null ? "" : p.value.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
 function col(field: LedgerColumn, extra: Partial<ColDef<LedgerRow>> = {}): ColDef<LedgerRow> {
-  return { field, colId: field, headerName: LEDGER_COLUMNS[field].label, ...extra };
+  const c = LEDGER_COLUMNS[field];
+  // Explicit filter types, so the filter model from Ask the ledger always matches.
+  return { field, colId: field, headerName: c.label, filter: FILTER[c.kind], enableRowGroup: c.kind === "text", ...extra };
 }
 
 export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
@@ -79,9 +90,9 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
       col("year", { width: 80, hide: true }),
       col("family", { width: 120 }),
       col("event", { minWidth: 200, flex: 1 }),
-      col("amount", { width: 130, valueFormatter: money, type: "rightAligned" }),
-      col("paid", { width: 130, valueFormatter: money, type: "rightAligned", enableCellChangeFlash: true }),
-      col("owing", { width: 130, valueFormatter: money, type: "rightAligned", enableCellChangeFlash: true }),
+      col("amount", { width: 130, valueFormatter: money, type: "rightAligned", aggFunc: "sum" }),
+      col("paid", { width: 130, valueFormatter: money, type: "rightAligned", aggFunc: "sum", enableCellChangeFlash: true }),
+      col("owing", { width: 130, valueFormatter: money, type: "rightAligned", aggFunc: "sum", enableCellChangeFlash: true }),
       col("status", { width: 175, cellRenderer: StatusCell, enableCellChangeFlash: true }),
       col("depositPaid", { width: 130, enableCellChangeFlash: true }),
       col("onPlan", { width: 130, cellRenderer: FlagCell }),
@@ -94,7 +105,7 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
   );
 
   const defaultColDef = useMemo<ColDef<LedgerRow>>(
-    () => ({ sortable: true, filter: true, resizable: true, filterParams: { maxNumConditions: 6 } }),
+    () => ({ sortable: true, resizable: true, filterParams: { maxNumConditions: 6 } }),
     [],
   );
 
@@ -157,7 +168,10 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
     const api = apiRef.current;
     if (!api) return;
     api.setFilterModel(null);
-    api.applyColumnState({ defaultState: { sort: null }, state: columnDefs.map((c) => ({ colId: c.colId!, hide: c.colId === "year" })) });
+    api.applyColumnState({
+      defaultState: { sort: null, ...(CAN_GROUP ? { rowGroup: false } : {}) },
+      state: columnDefs.map((c) => ({ colId: c.colId!, hide: c.colId === "year" })),
+    });
     setView(null);
     setQuestion("");
   }
@@ -216,7 +230,7 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
         </form>
         {!view && !asking && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Who in 4B hasn't paid the camp deposit yet?", "Who owes more than $200?", "Who paid cash?", "Who hasn't given consent?"].map((s) => (
+            {["Who in 4B hasn't paid the camp deposit yet?", ...(CAN_GROUP ? ["Group by class with totals"] : []), "Who owes more than $200?", "Who paid cash?", "Who hasn't given consent?"].map((s) => (
               <button
                 key={s}
                 type="button"
@@ -251,6 +265,11 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             getRowId={(p) => p.data.id}
+            autoGroupColumnDef={{ headerName: "Group", minWidth: 200, pinned: "left" }}
+            groupDefaultExpanded={1}
+            groupTotalRow="bottom"
+            suppressAggFuncInHeader
+            rowGroupPanelShow={CAN_GROUP ? "onlyWhenGrouping" : "never"}
             pinnedBottomRowData={totals}
             onGridReady={(e) => {
               apiRef.current = e.api;

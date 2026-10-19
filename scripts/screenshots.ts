@@ -8,6 +8,7 @@ const PAGES: { name: string; path: string; width?: number; ask?: string }[] = [
   { name: "home", path: "/" },
   { name: "ledger", path: "/office/ledger" },
   { name: "ledger-ask", path: "/office/ledger", ask: "Who in 4B hasn't paid the camp deposit yet?" },
+  { name: "ledger-grouped", path: "/office/ledger", ask: "Group by class with totals" },
   { name: "events", path: "/office/events" },
   { name: "new-event", path: "/office/events/new" },
   { name: "approvals", path: "/office/approvals" },
@@ -19,6 +20,9 @@ async function main() {
   const browser = await chromium.launch();
   for (const p of PAGES) {
     const page = await browser.newPage({ viewport: { width: p.width ?? 1440, height: p.width ? 844 : 900 }, deviceScaleFactor: 1 });
+    page.on("console", (m) => {
+      if (m.type() === "error" || m.type() === "warning" || /licen[cs]e/i.test(m.text())) console.log(`  [${p.name} console ${m.type()}] ${m.text().slice(0, 200)}`);
+    });
     await page.goto(base + p.path, { waitUntil: "networkidle" });
     if (p.ask) {
       await page.fill("#ask", p.ask);
