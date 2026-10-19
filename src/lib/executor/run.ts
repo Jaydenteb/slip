@@ -88,6 +88,8 @@ export async function approveAndExecute(approvalItemId: string, decidedBy: strin
   } catch (err) {
     const message = err instanceof UserError ? err.message : briefError(err);
     await db.approvalItem.update({ where: { id: item.id }, data: { status: "FAILED", error: message } });
+    // One line per failed approval in the logs, so a failing money step is easy to spot.
+    console.error(JSON.stringify({ level: "error", at: new Date().toISOString(), event: "approval.failed", kind: item.kind, approvalItemId: item.id, message }));
     throw err;
   }
 }

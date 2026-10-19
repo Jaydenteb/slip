@@ -20,7 +20,7 @@ services:
     # starts the app. (Free plans have no pre-deploy step; on paid plans this can move
     # to preDeployCommand.)
     startCommand: npx prisma db push --skip-generate && npx tsx prisma/seed-if-empty.ts && npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
         value: "22"
