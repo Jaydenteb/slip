@@ -6,8 +6,8 @@
 //   npm run spike -- status <id>     read status + payments straight from PayPal (the Sync path)
 //   npm run spike -- cash <id> <amt> record a cash payment against the invoice
 //
-// Needs PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, SPIKE_SCHOOL_EMAIL (sandbox business
-// account) and SPIKE_PARENT_EMAIL (sandbox personal account) in .env.
+// Needs PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, SANDBOX_SCHOOL_EMAIL (sandbox business
+// account) and SANDBOX_PARENT_EMAIL (sandbox personal account) in .env.
 
 import { runPayPalTool } from "../src/lib/paypal/toolkit";
 import { getInvoice } from "../src/lib/paypal/rest";
@@ -37,13 +37,13 @@ async function create() {
     invoice_date: today,
     note: "Year 4 camp at Bellbird Creek. Pay the $85 deposit now, the balance by 1 Feb.",
     invoicer_business_name: "Bellbird Primary School",
-    invoicer_email_address: need("SPIKE_SCHOOL_EMAIL"),
+    invoicer_email_address: need("SANDBOX_SCHOOL_EMAIL"),
     invoicer_country_code: "AU",
     primary_recipients: [
       {
         billing_info: {
           name: { given_name: "Sam", surname: "Nguyen" },
-          email_address: need("SPIKE_PARENT_EMAIL"),
+          email_address: need("SANDBOX_PARENT_EMAIL"),
         },
       },
     ],
