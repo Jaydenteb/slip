@@ -91,9 +91,11 @@ test("group by falls back to sorting when grouping isn't available", () => {
   const cls = plain.columnState.find((c) => c.colId === "className")!;
   assert.equal(cls.sort, "asc");
   assert.equal("rowGroup" in cls, false);
+  assert.deepEqual(plain.skipped, ["grouping by Class (sorted by Class instead)"]);
 
   const grouped = toGridState({ ...base, groupBy: "className" }, { canGroup: true });
   assert.equal(grouped.columnState.find((c) => c.colId === "className")!.rowGroup, true);
+  assert.deepEqual(grouped.skipped, []);
 });
 
 test("chosen columns are shown along with anything filtered or sorted", () => {

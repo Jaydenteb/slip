@@ -10,12 +10,13 @@ export default function OfficeLayout({ children }: LayoutProps<"/office">) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 px-4 pt-3 sm:h-14 sm:flex-nowrap sm:pt-0 sm:px-6">
           <Link href="/" aria-label="Slip home">
             <Logo />
           </Link>
           <span className="hidden text-sm text-ink-faint sm:inline">Bellbird Primary · School office</span>
-          <nav className="ml-auto flex items-center gap-1 text-sm">
+          {/* On a phone the nav gets its own row and scrolls sideways. */}
+          <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-3 py-2 text-sm whitespace-nowrap sm:mx-0 sm:ml-auto sm:w-auto sm:px-0 sm:py-0">
             <NavLink href="/office/ledger">Ledger</NavLink>
             <NavLink href="/office/events">Events</NavLink>
             <NavLink href="/office/approvals">
@@ -27,9 +28,10 @@ export default function OfficeLayout({ children }: LayoutProps<"/office">) {
             <NavLink href="/office/activity">Activity</NavLink>
             <Link
               href={`/family/${DEMO_FAMILY_TOKEN}`}
-              className="ml-2 rounded-lg border border-line px-3 py-1.5 text-ink-soft hover:border-ink-faint hover:text-ink"
+              className="ml-auto rounded-lg border border-line px-3 py-1.5 text-ink-soft hover:border-ink-faint hover:text-ink sm:ml-2"
             >
-              View as parent
+              <span className="sm:hidden">Parent</span>
+              <span className="hidden sm:inline">View as parent</span>
             </Link>
           </nav>
         </div>

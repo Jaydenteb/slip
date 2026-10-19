@@ -87,8 +87,10 @@ export function toGridState(q: LedgerQuery, opts: { canGroup: boolean }): GridSt
 
   // Sorting: grouping falls back to sorting by that column first when grouping isn't available.
   const sorts = [...q.sort];
-  if (q.groupBy && !opts.canGroup && !sorts.some((s) => s.column === q.groupBy)) {
-    sorts.unshift({ column: q.groupBy, direction: "asc" });
+  if (q.groupBy && !opts.canGroup) {
+    const label = LEDGER_COLUMNS[q.groupBy].label;
+    skipped.push(`grouping by ${label} (sorted by ${label} instead)`);
+    if (!sorts.some((s) => s.column === q.groupBy)) sorts.unshift({ column: q.groupBy, direction: "asc" });
   }
 
   const shown = q.columns ? new Set<LedgerColumn>(["student", ...q.columns]) : null;

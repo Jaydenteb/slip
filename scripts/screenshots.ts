@@ -14,6 +14,9 @@ const PAGES: { name: string; path: string; width?: number; ask?: string }[] = [
   { name: "approvals", path: "/office/approvals" },
   { name: "activity", path: "/office/activity" },
   { name: "family-phone", path: "/family/nguyen-family", width: 390 },
+  { name: "home-phone", path: "/", width: 390 },
+  { name: "ledger-phone", path: "/office/ledger", width: 390 },
+  { name: "approvals-phone", path: "/office/approvals", width: 390 },
 ];
 
 async function main() {

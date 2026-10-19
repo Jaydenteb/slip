@@ -1,6 +1,7 @@
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { claude, FALLBACK, MODEL, RefusedError } from "../ai/claude";
 import { LEDGER_COLUMNS, LEDGER_STATUSES, type LedgerRow } from "./columns";
+import { CAN_GROUP } from "./licence";
 import { LedgerQuerySchema, type LedgerQuery } from "./query";
 
 const SYSTEM = `You turn a school office's question about payments into a view of their ledger grid.
@@ -24,6 +25,9 @@ export async function askLedger(question: string, rows: LedgerRow[], today: stri
     `Events: ${distinct("event").join("; ") || "none yet"}`,
     `Classes: ${distinct("className").join(", ")}`,
     `Statuses: ${LEDGER_STATUSES.join(", ")}`,
+    CAN_GROUP
+      ? "Row grouping is available, with subtotals for amount, paid and owing."
+      : "Row grouping isn't available in this grid: set groupBy to null, sort by that column instead, and don't describe the view as grouped.",
   ].join("\n");
 
   const response = await claude().beta.messages.parse({

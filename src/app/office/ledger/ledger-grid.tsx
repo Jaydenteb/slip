@@ -7,6 +7,7 @@ import {
   themeQuartz,
   type ColDef,
   type GridApi,
+  type GridOptions,
   type ICellRendererParams,
   type ValueFormatterParams,
 } from "ag-grid-community";
@@ -16,16 +17,9 @@ import { LEDGER_COLUMNS, type LedgerColumn, type LedgerRow, type LedgerStatus } 
 import { toGridState } from "@/lib/ledger/query";
 import { Button, Card } from "@/components/ui";
 import { askLedgerAction } from "../actions";
+import { AG_GRID_LICENCE, CAN_GROUP } from "@/lib/ledger/licence";
 
-// Row grouping is an AG Grid Enterprise feature. With a licence key we use Enterprise
-// (rows group by class with subtotals); without one, the free Community edition, where
-// "group by" sorts instead. Judges running it locally without a key still get a full grid.
-const LICENCE = process.env.NEXT_PUBLIC_AG_GRID_LICENSE_KEY;
-// v3 keys carry a product type: only Grid (01) or Grid + Charts (0102) unlock the grid. Anything else
-// (an AG Studio key, say) would just put a watermark on the ledger, so stay on Community instead.
-const LICENCE_TYPE = LICENCE?.match(/\[v3\]_\[(\w+)\]/)?.[1];
-const CAN_GROUP = Boolean(LICENCE) && (LICENCE_TYPE === undefined || LICENCE_TYPE === "01" || LICENCE_TYPE === "0102");
-if (CAN_GROUP) LicenseManager.setLicenseKey(LICENCE!);
+if (CAN_GROUP) LicenseManager.setLicenseKey(AG_GRID_LICENCE!);
 const modules = CAN_GROUP ? [AllEnterpriseModule] : [AllCommunityModule];
 
 const FILTER = { text: "agTextColumnFilter", number: "agNumberColumnFilter", date: "agDateColumnFilter" } as const;
@@ -68,10 +62,20 @@ function FlagCell({ value, data }: ICellRendererParams<LedgerRow, string>) {
 const money = (p: ValueFormatterParams<LedgerRow, number>) =>
   p.value == null ? "" : p.value.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
+// Grouping props only go to the grid when the Enterprise module is loaded: Community logs an error for each one.
+const SUM: Partial<ColDef<LedgerRow>> = CAN_GROUP ? { aggFunc: "sum" } : {};
+const GROUPING = {
+  autoGroupColumnDef: { headerName: "Group", minWidth: 200, pinned: "left" },
+  groupDefaultExpanded: 1,
+  groupTotalRow: "bottom",
+  suppressAggFuncInHeader: true,
+  rowGroupPanelShow: "onlyWhenGrouping",
+} satisfies Partial<GridOptions<LedgerRow>>;
+
 function col(field: LedgerColumn, extra: Partial<ColDef<LedgerRow>> = {}): ColDef<LedgerRow> {
   const c = LEDGER_COLUMNS[field];
   // Explicit filter types, so the filter model from Ask the ledger always matches.
-  return { field, colId: field, headerName: c.label, filter: FILTER[c.kind], enableRowGroup: c.kind === "text", ...extra };
+  return { field, colId: field, headerName: c.label, filter: FILTER[c.kind], ...(CAN_GROUP && { enableRowGroup: c.kind === "text" }), ...extra };
 }
 
 export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
@@ -86,13 +90,13 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
   const columnDefs = useMemo<ColDef<LedgerRow>[]>(
     () => [
       col("student", { pinned: "left", minWidth: 170 }),
-      col("className", { width: 90 }),
+      col("className", { width: 130 }),
       col("year", { width: 80, hide: true }),
       col("family", { width: 120 }),
       col("event", { minWidth: 200, flex: 1 }),
-      col("amount", { width: 130, valueFormatter: money, type: "rightAligned", aggFunc: "sum" }),
-      col("paid", { width: 130, valueFormatter: money, type: "rightAligned", aggFunc: "sum", enableCellChangeFlash: true }),
-      col("owing", { width: 130, valueFormatter: money, type: "rightAligned", aggFunc: "sum", enableCellChangeFlash: true }),
+      col("amount", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM }),
+      col("paid", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
+      col("owing", { width: 145, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
       col("status", { width: 175, cellRenderer: StatusCell, enableCellChangeFlash: true }),
       col("depositPaid", { width: 130, enableCellChangeFlash: true }),
       col("onPlan", { width: 130, cellRenderer: FlagCell }),
@@ -265,11 +269,7 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             getRowId={(p) => p.data.id}
-            autoGroupColumnDef={{ headerName: "Group", minWidth: 200, pinned: "left" }}
-            groupDefaultExpanded={1}
-            groupTotalRow="bottom"
-            suppressAggFuncInHeader
-            rowGroupPanelShow={CAN_GROUP ? "onlyWhenGrouping" : "never"}
+            {...(CAN_GROUP && GROUPING)}
             pinnedBottomRowData={totals}
             onGridReady={(e) => {
               apiRef.current = e.api;
