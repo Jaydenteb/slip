@@ -39,7 +39,7 @@ async function loadFamily(familyId: string) {
   });
 }
 
-function familyTools(familyId: string) {
+export function familyTools(familyId: string) {
   const getOverview = betaZodTool({
     name: "get_family_overview",
     description:

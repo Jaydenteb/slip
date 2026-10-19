@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "typecheck": "prisma generate && tsc --noEmit",
+    "typecheck": "prisma generate && next typegen && tsc --noEmit",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
@@ -17,7 +17,8 @@
     "e2e:office": "tsx --env-file=.env scripts/e2e-office.ts",
     "sync": "tsx --env-file=.env scripts/sync.ts",
     "try-chat": "tsx --env-file=.env scripts/try-chat.ts",
-    "approve": "tsx --env-file=.env scripts/approve.ts"
+    "approve": "tsx --env-file=.env scripts/approve.ts",
+    "test:db": "node --env-file-if-exists=.env --import tsx --test --test-concurrency=1 \"tests/db/**/*.test.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

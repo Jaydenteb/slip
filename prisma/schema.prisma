@@ -47,7 +47,7 @@ model Student {
   familyId    String
   family      Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
   classroomId String
-  classroom   Classroom    @relation(fields: [classroomId], references: [id])
+  classroom   Classroom    @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   firstName   String
   lastName    String
   enrolments  Enrolment[]
@@ -147,7 +147,7 @@ model InvoiceLine {
   invoiceId String
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   studentId String
-  student   Student @relation(fields: [studentId], references: [id])
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   label     String
   amount    Decimal @db.Decimal(10, 2)
 }
@@ -219,7 +219,7 @@ model AgentAction {
   actor          String // "office-agent" | "parent-agent" | "executor" | "office" | "webhook" | "sync"
   action         String // e.g. "paypal.create_invoice"
   approvalItemId String?
-  approvalItem   ApprovalItem? @relation(fields: [approvalItemId], references: [id])
+  approvalItem   ApprovalItem? @relation(fields: [approvalItemId], references: [id], onDelete: SetNull)
   input          Json?
   output         Json?
   ok             Boolean       @default(true)
