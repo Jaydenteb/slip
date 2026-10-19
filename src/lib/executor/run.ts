@@ -7,8 +7,9 @@ import { runPayPalTool } from "../paypal/toolkit";
 import { createGatedPayPal } from "./gate";
 import type { PaymentPlanPayload } from "../agent/parent";
 import type { ReminderBatchPayload } from "../reminders/service";
-import { joinNames, loadForWithdrawal, type WithdrawalPayload } from "../withdrawals/service";
+import { joinNames, loadForWithdrawal, REFUND_ACTIONS, type WithdrawalPayload } from "../withdrawals/service";
 import { syncInvoice, syncOpenInvoices } from "../payments/sync";
+import { briefError, UserError } from "../errors";
 
 // The executor: runs an approval item's actions after a person approves it. This is
 // the only code that moves money or contacts parents, and it only does so through
@@ -37,10 +38,25 @@ export type InvoiceBatchPayload = { eventId: string; invoiceIds: string[] };
 
 export class ApprovalStateError extends Error {}
 
-export async function approveAndExecute(approvalItemId: string, decidedBy: string) {
+// A run that crashed part-way (a restart, a timeout) stays EXECUTING. After this long it
+// can be retried; every step checks the audit log first, so nothing runs twice.
+const STUCK_AFTER_MS = 10 * 60_000;
+
+function decidable(approvalItemId: string, schoolId?: string): Prisma.ApprovalItemWhereInput {
+  return {
+    id: approvalItemId,
+    ...(schoolId ? { schoolId } : {}),
+    OR: [
+      { status: { in: ["PENDING", "FAILED"] } },
+      { status: "EXECUTING", decidedAt: { lt: new Date(Date.now() - STUCK_AFTER_MS) } },
+    ],
+  };
+}
+
+export async function approveAndExecute(approvalItemId: string, decidedBy: string, opts: { schoolId?: string } = {}) {
   // Claim it in one conditional update, so two clicks can't run it twice.
   const claimed = await db.approvalItem.updateMany({
-    where: { id: approvalItemId, status: { in: ["PENDING", "FAILED"] } },
+    where: decidable(approvalItemId, opts.schoolId),
     data: { status: "EXECUTING", decidedBy, decidedAt: new Date(), error: null },
   });
   if (claimed.count === 0) throw new ApprovalStateError("This item has already been decided or is running");
@@ -70,15 +86,15 @@ export async function approveAndExecute(approvalItemId: string, decidedBy: strin
     }
     await db.approvalItem.update({ where: { id: item.id }, data: { status: "EXECUTED" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = err instanceof UserError ? err.message : briefError(err);
     await db.approvalItem.update({ where: { id: item.id }, data: { status: "FAILED", error: message } });
     throw err;
   }
 }
 
-export async function rejectApproval(approvalItemId: string, decidedBy: string) {
+export async function rejectApproval(approvalItemId: string, decidedBy: string, opts: { schoolId?: string } = {}) {
   const updated = await db.approvalItem.updateMany({
-    where: { id: approvalItemId, status: { in: ["PENDING", "FAILED"] } },
+    where: decidable(approvalItemId, opts.schoolId),
     data: { status: "REJECTED", decidedBy, decidedAt: new Date() },
   });
   if (updated.count === 0) throw new ApprovalStateError("This item has already been decided or is running");
@@ -103,17 +119,29 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
 
   const note = invoiceNote(event);
   const failures: string[] = [];
+  // Invoices this approval already created in PayPal, by reference, in case a previous
+  // attempt stopped before saving the PayPal id.
+  const created = await db.agentAction.findMany({
+    where: { approvalItemId, action: "paypal.create_invoice", ok: true },
+    select: { input: true, output: true },
+  });
+  const createdFor = new Map(created.map((c) => [(c.input as { reference?: string }).reference, c.output]));
 
   // A few at a time: fast enough for a class, gentle on the sandbox.
   await inBatches(invoices, 4, async (inv) => {
+    // Sent (or paid) on an earlier attempt: never send it twice.
+    if (inv.status !== "PROPOSED") return;
     try {
       let paypalId = inv.paypalInvoiceId;
+      const fields = invoiceFields(event, inv, note, inv.minimumPayment != null ? toCents(inv.minimumPayment) : null);
+      const earlier = createdFor.get(fields.reference);
+      if (!paypalId && earlier) {
+        paypalId = invoiceIdFrom(earlier);
+        await db.invoice.update({ where: { id: inv.id }, data: { paypalInvoiceId: paypalId } });
+      }
       // Create once. If a previous attempt created it but failed to send, reuse it.
       if (!paypalId) {
-        const created = await gated(approvalItemId, "create_invoice", {
-          invoice_date: todayInMelbourne(),
-          ...invoiceFields(event, inv, note, inv.minimumPayment ? toCents(inv.minimumPayment) : null),
-        });
+        const created = await gated(approvalItemId, "create_invoice", { invoice_date: todayInMelbourne(), ...fields });
         paypalId = invoiceIdFrom(created);
         await db.invoice.update({ where: { id: inv.id }, data: { paypalInvoiceId: paypalId } });
       }
@@ -129,12 +157,12 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
         },
       });
     } catch (err) {
-      failures.push(`${inv.family.familyName}: ${err instanceof Error ? err.message : String(err)}`);
+      failures.push(`${inv.family.familyName}: ${briefError(err)}`);
     }
   });
 
   if (failures.length) {
-    throw new Error(`${failures.length} of ${invoices.length} invoices didn't send. Approve again to retry them.\n${failures.join("\n")}`);
+    throw new UserError(`${failures.length} of ${invoices.length} invoices didn't send. Approve again to retry them.\n${failures.join("\n")}`);
   }
   await db.event.update({ where: { id: event.id }, data: { status: "OPEN" } });
 }
@@ -146,12 +174,20 @@ async function sendReminderBatch(approvalItemId: string, payload: ReminderBatchP
     select: { input: true },
   });
   const alreadySent = new Set(done.map((d) => (d.input as { invoice_id?: string } | null)?.invoice_id));
-  // Catch up with PayPal first, so nobody who has just paid gets chased.
-  await syncOpenInvoices({ eventId: payload.eventId, maxAgeMs: 60_000 });
+  // Catch up with PayPal first, so nobody who has just paid gets chased. If PayPal
+  // couldn't be checked for a family, they're skipped rather than chased on old numbers.
+  const sync = await syncOpenInvoices({ eventId: payload.eventId, maxAgeMs: 60_000 });
+  const unchecked = new Set(sync.failed);
   const invoices = await db.invoice.findMany({
     where: { id: { in: payload.reminders.map((r) => r.invoiceId) }, eventId: payload.eventId },
     include: { family: true },
   });
+  // A family who asked for help after the batch was drafted is left to the office.
+  const flagged = await db.approvalItem.findMany({
+    where: { kind: "HARDSHIP_FLAG", status: { not: "REJECTED" }, familyId: { in: invoices.map((i) => i.familyId) } },
+    select: { familyId: true },
+  });
+  const needsSupport = new Set(flagged.map((f) => f.familyId));
   const failures: string[] = [];
 
   await inBatches(invoices, 4, async (inv) => {
@@ -159,36 +195,42 @@ async function sendReminderBatch(approvalItemId: string, payload: ReminderBatchP
     const note = reminder && payload.notes[reminder.tier];
     // Paid in the meantime, or cancelled: no reminder.
     if (!reminder || !note || !inv.paypalInvoiceId || alreadySent.has(inv.paypalInvoiceId)) return;
+    if (needsSupport.has(inv.familyId) || unchecked.has(inv.id)) return;
     if (!["SENT", "PARTIALLY_PAID"].includes(inv.status) || toCents(inv.amountPaid) >= toCents(inv.total)) return;
     try {
       await gated(approvalItemId, "send_invoice_reminder", { invoice_id: inv.paypalInvoiceId, subject: note.subject, note: note.note });
     } catch (err) {
-      failures.push(`${inv.family.familyName}: ${err instanceof Error ? err.message : String(err)}`);
+      failures.push(`${inv.family.familyName}: ${briefError(err)}`);
     }
   });
 
   if (failures.length) {
-    throw new Error(`${failures.length} of ${invoices.length} reminders didn't send. Approve again to retry them.\n${failures.join("\n")}`);
+    throw new UserError(`${failures.length} of ${invoices.length} reminders didn't send. Approve again to retry them.\n${failures.join("\n")}`);
   }
 }
 
 // Withdrawing children: the PayPal invoice is cut down (or cancelled if nothing was paid),
 // any refund goes back the way it came, then Slip's own records follow.
 async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayload) {
-  const { inv } = await loadForWithdrawal(payload.invoiceId);
+  const { inv, auditedRefunds } = await loadForWithdrawal(payload.invoiceId);
   const event = await db.event.findUniqueOrThrow({ where: { id: inv.eventId }, include: { school: true, feeItems: true } });
   const { plan } = payload;
   const done = await db.agentAction.findMany({ where: { approvalItemId, ok: true }, select: { action: true, input: true } });
   const did = (action: string, match: (input: Record<string, unknown>) => boolean = () => true) =>
     done.some((d) => d.action === action && match((d.input ?? {}) as Record<string, unknown>));
   const refundedHere = done
-    .filter((d) => d.action === "paypal.create_refund" || d.action === "paypal.record_refund_for_invoice")
+    .filter((d) => (REFUND_ACTIONS as readonly string[]).includes(d.action))
     .reduce((n, d) => n + toCents(((d.input as { amount?: { value: string } }).amount?.value) ?? "0"), 0);
 
   // Stop if money moved since the office looked at this (refunds from a retry don't count).
+  // Slip's own refunds are checked in the audit log too, because PayPal shows them late.
   const gross = toCents(inv.amountPaid) + toCents(inv.amountRefunded);
-  if (gross !== payload.grossPaid || toCents(inv.amountRefunded) !== payload.refundedSoFar + refundedHere) {
-    throw new Error("Payments on this invoice changed since the withdrawal was drafted. Reject it and draft it again.");
+  if (
+    gross !== payload.grossPaid ||
+    toCents(inv.amountRefunded) !== payload.refundedSoFar + refundedHere ||
+    auditedRefunds - refundedHere > payload.refundedSoFar
+  ) {
+    throw new UserError("Payments on this invoice changed since the withdrawal was drafted. Reject it and draft it again.");
   }
   const paypalId = inv.paypalInvoiceId!;
   const currency = event.school.currency;
@@ -235,8 +277,10 @@ async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayloa
     }
   }
 
+  // Only children on this family's invoice, whatever the payload says.
+  const leaving = inv.lines.filter((l) => payload.studentIds.includes(l.studentId)).map((l) => l.studentId);
   await db.$transaction([
-    db.invoiceLine.deleteMany({ where: { invoiceId: inv.id, studentId: { in: payload.studentIds } } }),
+    db.invoiceLine.deleteMany({ where: { invoiceId: inv.id, studentId: { in: leaving } } }),
     db.invoice.update({
       where: { id: inv.id },
       data: {
@@ -246,7 +290,10 @@ async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayloa
         ...(plan.cancel ? { status: "CANCELLED" } : {}),
       },
     }),
-    db.enrolment.updateMany({ where: { eventId: inv.eventId, studentId: { in: payload.studentIds } }, data: { attending: false } }),
+    db.enrolment.updateMany({
+      where: { eventId: inv.eventId, studentId: { in: leaving }, student: { familyId: inv.familyId } },
+      data: { attending: false },
+    }),
   ]);
   // PayPal takes a few seconds to attach a refund to the invoice; wait for it so the
   // ledger and the family page don't briefly show the money as still paid.
@@ -294,11 +341,19 @@ function invoiceFields(event: EventForPayPal, inv: InvoiceForPayPal, note: strin
 // An approved payment plan lowers the PayPal invoice's minimum payment to the first
 // instalment, so the family can pay as they go, and records the schedule.
 async function applyPaymentPlan(approvalItemId: string, payload: PaymentPlanPayload) {
+  // The plan splits what was owing when it was drafted; if that's changed (a payment,
+  // a withdrawal), it no longer adds up and the family needs a new one.
+  await syncInvoice(payload.invoiceId);
   const inv = await db.invoice.findUniqueOrThrow({
     where: { id: payload.invoiceId },
     include: { family: true, lines: true, event: { include: { school: true } } },
   });
-  if (!inv.paypalInvoiceId) throw new Error("This invoice hasn't been sent through PayPal yet");
+  if (!inv.paypalInvoiceId) throw new UserError("This invoice hasn't been sent through PayPal yet");
+  if (!["SENT", "PARTIALLY_PAID"].includes(inv.status)) throw new UserError("This invoice is no longer open, so the plan isn't needed.");
+  const planned = payload.instalments.reduce((n, i) => n + toCents(i.amount), 0);
+  if (planned !== toCents(inv.total) - toCents(inv.amountPaid)) {
+    throw new UserError("What's owing has changed since this plan was drafted. Reject it and ask the family to request a new one.");
+  }
   const first = toCents(payload.instalments[0].amount);
   const schedule = payload.instalments
     .map((i) => `${formatDate(new Date(`${i.dueOn}T00:00:00Z`))}: $${i.amount}`)
@@ -315,6 +370,8 @@ async function applyPaymentPlan(approvalItemId: string, payload: PaymentPlanPayl
       invoice_date: live.detail?.invoice_date,
       send_to_recipient: false,
       ...invoiceFields(inv.event, inv, note, first),
+      // Keep PayPal's own items (they may include a "withdrawn – refunded" line).
+      ...(live.items?.length ? { items: live.items.map((i) => ({ name: i.name, quantity: i.quantity, unit_amount: i.unit_amount })) } : {}),
     },
   });
   await db.invoice.update({

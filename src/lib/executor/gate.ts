@@ -47,14 +47,16 @@ export function createGatedPayPal(deps: GateDeps) {
       throw new GateError(`${tool} isn't allowed for a ${item.kind} approval`);
     }
 
+    let output: unknown;
     try {
-      const output = await deps.runTool(tool, args);
-      await deps.audit({ schoolId: item.schoolId, approvalItemId, action: `paypal.${tool}`, input: args, output, ok: true });
-      return output;
+      output = await deps.runTool(tool, args);
     } catch (err) {
-      const output = { error: err instanceof Error ? err.message : String(err) };
-      await deps.audit({ schoolId: item.schoolId, approvalItemId, action: `paypal.${tool}`, input: args, output, ok: false });
+      const failed = { error: err instanceof Error ? err.message : String(err) };
+      await deps.audit({ schoolId: item.schoolId, approvalItemId, action: `paypal.${tool}`, input: args, output: failed, ok: false });
       throw err;
     }
+    // Outside the try: if PayPal did it, it's recorded as done, so a retry won't repeat it.
+    await deps.audit({ schoolId: item.schoolId, approvalItemId, action: `paypal.${tool}`, input: args, output, ok: true });
+    return output;
   };
 }

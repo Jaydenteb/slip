@@ -47,7 +47,7 @@ Parents pay with PayPal and give consent by ticking a box on their family page, 
 export async function parseEventDescription(text: string, today: string): Promise<ParsedEvent> {
   const response = await claude().beta.messages.parse({
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: 4000,
     ...FALLBACK,
     output_config: { effort: "medium", format: betaZodOutputFormat(ParsedEventSchema) },
     system: SYSTEM,

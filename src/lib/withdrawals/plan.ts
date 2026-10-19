@@ -1,4 +1,5 @@
 import type { Cents } from "../money";
+import { UserError } from "../errors";
 
 // What withdrawing children from a family's invoice means in money: the invoice drops
 // to the children still going, and anything paid beyond that is refunded. PayPal can't
@@ -21,6 +22,7 @@ export type RefundStep =
 
 export type WithdrawalPlan = {
   withdrawn: string[]; // first names
+  withdrawnIds: string[]; // student ids, only those actually on the invoice
   remainingLines: WithdrawalInput["lines"];
   remainingTotal: Cents;
   refund: Cents;
@@ -36,7 +38,7 @@ export type WithdrawalPlan = {
 export function planWithdrawal(input: WithdrawalInput): WithdrawalPlan {
   const leaving = new Set(input.withdraw);
   const withdrawnLines = input.lines.filter((l) => leaving.has(l.studentId));
-  if (!withdrawnLines.length) throw new Error("None of those children are on this invoice.");
+  if (!withdrawnLines.length) throw new UserError("None of those children are on this invoice.");
 
   const remainingLines = input.lines.filter((l) => !leaving.has(l.studentId));
   const remainingTotal = sum(remainingLines.map((l) => l.amount));
@@ -63,6 +65,7 @@ export function planWithdrawal(input: WithdrawalInput): WithdrawalPlan {
 
   return {
     withdrawn: [...new Set(withdrawnLines.map((l) => l.firstName))],
+    withdrawnIds: [...new Set(withdrawnLines.map((l) => l.studentId))],
     remainingLines,
     remainingTotal,
     refund,

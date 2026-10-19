@@ -3,6 +3,7 @@ import { DEMO_SCHOOL_ID } from "../demo/seed";
 import { buildInvoiceDrafts } from "../invoicing/build";
 import { formatMoney, fromCents, toCents } from "../money";
 import type { ParsedEvent } from "./parse";
+import { UserError } from "../errors";
 
 // The event the office confirmed on the review screen (the parsed event, possibly edited).
 export type ConfirmedEvent = ParsedEvent & { sourceText: string };
@@ -14,8 +15,8 @@ export async function saveEvent(input: ConfirmedEvent) {
       ? input.classNames.some((n) => n.toUpperCase() === c.name.toUpperCase())
       : input.yearLevels.includes(c.year),
   );
-  if (!invited.length) throw new Error("No classes match this event. Check the year levels or class names.");
-  if (!input.fees.length) throw new Error("Add at least one fee.");
+  if (!invited.length) throw new UserError("No classes match this event. Check the year levels or class names.");
+  if (!input.fees.length) throw new UserError("Add at least one fee.");
 
   const students = await db.student.findMany({ where: { classroomId: { in: invited.map((c) => c.id) } } });
 
@@ -60,7 +61,7 @@ export async function proposeInvoiceBatch(eventId: string) {
   const pending = await db.approvalItem.findFirst({
     where: { eventId, kind: "INVOICE_BATCH", status: { in: ["PENDING", "EXECUTING", "FAILED"] } },
   });
-  if (pending) throw new Error("There's already an invoice batch for this event waiting in Approvals.");
+  if (pending) throw new UserError("There's already an invoice batch for this event waiting in Approvals.");
 
   const invoiced = new Set(event.invoices.map((i) => i.familyId));
   const drafts = buildInvoiceDrafts(
@@ -78,7 +79,7 @@ export async function proposeInvoiceBatch(eventId: string) {
       deposit: f.depositAmount != null ? toCents(f.depositAmount) : null,
     })),
   );
-  if (!drafts.length) throw new Error("Every family on this event already has an invoice.");
+  if (!drafts.length) throw new UserError("Every family on this event already has an invoice.");
 
   const invoiceIds = await db.$transaction(async (tx) => {
     const ids: string[] = [];

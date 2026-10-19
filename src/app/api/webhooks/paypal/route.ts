@@ -8,8 +8,13 @@ import { syncInvoice } from "@/lib/payments/sync";
 // key, so retries are ignored), answer 200 straight away, and then treat the event
 // as a nudge to re-read the invoice from PayPal. The ledger only ever reflects what
 // PayPal says, never the webhook body, so out-of-order or missed events can't skew it.
+// PayPal's invoice events are a few kilobytes; anything far bigger isn't from PayPal.
+const MAX_BODY = 256 * 1024;
+
 export async function POST(request: Request) {
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return new Response("Too large", { status: 413 });
   const body = await request.text();
+  if (body.length > MAX_BODY) return new Response("Too large", { status: 413 });
   let event: { id?: string; event_type?: string; resource?: { id?: string; invoice?: { id?: string } } };
   try {
     event = JSON.parse(body);
@@ -17,6 +22,9 @@ export async function POST(request: Request) {
     return new Response("Bad JSON", { status: 400 });
   }
   if (!event.id || !event.event_type) return new Response("Not a PayPal event", { status: 400 });
+  // Only ask PayPal to check signatures on requests that carry all of PayPal's headers.
+  const signed = ["paypal-transmission-id", "paypal-transmission-time", "paypal-cert-url", "paypal-auth-algo", "paypal-transmission-sig"];
+  if (!signed.every((h) => request.headers.get(h))) return new Response("Signature check failed", { status: 401 });
 
   const verified = await verifyWebhookSignature(
     {

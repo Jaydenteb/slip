@@ -59,6 +59,7 @@ async function Approvals() {
                   </div>
                   <h2 className="mt-2 font-semibold">{item.title}</h2>
                   <p className="mt-1 max-w-3xl text-sm text-ink-soft">{item.summary}</p>
+                  <ParentWords item={item} />
                 </div>
                 <DecisionButtons id={item.id} kind={item.kind} running={item.status === "EXECUTING"} />
               </div>
@@ -95,6 +96,23 @@ async function Approvals() {
         </section>
       )}
     </div>
+  );
+}
+
+// Words that came from a parent (or Slip's summary of them) are shown apart from Slip's
+// own summary and marked as unchecked, so they can't pass for the facts of the request.
+function ParentWords({ item }: { item: { kind: string; proposedBy: string; payload: unknown } }) {
+  const payload = (item.payload ?? {}) as { parentNote?: string | null; reason?: string | null };
+  const words = item.kind === "REFUND" ? payload.reason : payload.parentNote;
+  if (!words) return null;
+  const fromParent = item.proposedBy === "parent-agent";
+  return (
+    <figure className="mt-3 max-w-3xl border-l-2 border-line pl-3 text-sm">
+      <figcaption className="text-xs text-ink-faint">
+        {fromParent ? "From the parent, passed on by Slip from the chat. Unchecked." : "Reason given by the office"}
+      </figcaption>
+      <blockquote className="mt-0.5 text-ink-soft italic">{words}</blockquote>
+    </figure>
   );
 }
 

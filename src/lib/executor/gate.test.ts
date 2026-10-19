@@ -75,3 +75,22 @@ test("audits failed PayPal calls too", async () => {
   await assert.rejects(run("a1", "send_invoice", {}), /boom/);
   assert.equal(audits[0].ok, false);
 });
+
+test("a PayPal call that worked is never recorded as failed, even if the audit write fails", async () => {
+  const audits: AuditEntry[] = [];
+  let first = true;
+  const run = createGatedPayPal({
+    getApproval: async () => ({ ...base, kind: "REFUND", status: "EXECUTING" }),
+    runTool: async () => ({ id: "REFUND-1" }),
+    audit: async (e) => {
+      if (first) {
+        first = false;
+        throw new Error("database blip");
+      }
+      audits.push(e);
+    },
+  });
+  await assert.rejects(run("a1", "create_refund", {}), /database blip/);
+  // No "failed" entry: a retry can't mistake this refund for one that didn't happen.
+  assert.deepEqual(audits, []);
+});

@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { allow } from "@/lib/agent/rate-limit";
+import { allow, clientIp, HOUR, MINUTE } from "@/lib/agent/rate-limit";
 import { db } from "@/lib/db";
 import { resetDemoSchool } from "@/lib/demo/seed";
 
@@ -10,8 +10,8 @@ export async function resetDemoAction(): Promise<{ ok: true } | { ok: false; err
   const schoolEmail = process.env.SANDBOX_SCHOOL_EMAIL;
   const parentEmail = process.env.SANDBOX_PARENT_EMAIL;
   if (!schoolEmail || !parentEmail) return { ok: false, error: "The demo isn't set up on this server." };
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-  if (!allow(`reset:${ip}`, 3, 10 * 60_000) || !allow("reset", 30, 60 * 60_000)) {
+  const ip = clientIp(await headers());
+  if (!allow(`reset:${ip}`, 3, 10 * MINUTE) || !allow("reset", 12, HOUR)) {
     return { ok: false, error: "The demo was reset a moment ago. Try again in a few minutes." };
   }
   try {

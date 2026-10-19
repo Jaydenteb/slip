@@ -88,3 +88,9 @@ test("whole family withdrawn before paying anything: cancel the invoice", () => 
 test("refuses a child who isn't on the invoice", () => {
   assert.throws(() => planWithdrawal({ ...base, withdraw: ["someone-else"] }));
 });
+
+test("ids that aren't on the invoice are ignored, so another family's child can't be withdrawn", () => {
+  const p = planWithdrawal({ ...base, withdraw: ["leo", "someone-else"] });
+  assert.deepEqual(p.withdrawnIds, ["leo"]);
+  assert.deepEqual(p.withdrawn, ["Leo"]);
+});

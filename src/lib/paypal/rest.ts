@@ -41,6 +41,7 @@ export type PayPalInvoice = {
     invoice_date?: string;
     metadata?: { recipient_view_url?: string; invoicer_view_url?: string };
   };
+  items?: { name: string; quantity: string; unit_amount: { value: string; currency_code: string } }[];
   amount?: { value: string; currency_code: string };
   due_amount?: { value: string; currency_code: string };
   payments?: {

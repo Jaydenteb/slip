@@ -2,6 +2,7 @@ import { db } from "../db";
 import { formatMoney, fromCents, toCents } from "../money";
 import { draftReminderNotes, type ReminderNote } from "./draft";
 import { chooseReminders, TIER_LABEL, tierCount, type ReminderTier, type SkippedFamily } from "./select";
+import { UserError } from "../errors";
 
 export type ReminderBatchPayload = {
   eventId: string;
@@ -19,7 +20,7 @@ export async function proposeReminderBatch(eventId: string, today: string) {
   const pending = await db.approvalItem.findFirst({
     where: { eventId, kind: "REMINDER_BATCH", status: { in: ["PENDING", "EXECUTING", "FAILED"] } },
   });
-  if (pending) throw new Error("There's already a reminder batch for this event waiting in Approvals.");
+  if (pending) throw new UserError("There's already a reminder batch for this event waiting in Approvals.");
 
   // Families who asked for help are left to the office, whether or not it has followed up yet.
   const supportFlags = await db.approvalItem.findMany({
@@ -48,7 +49,7 @@ export async function proposeReminderBatch(eventId: string, today: string) {
   );
   if (!chosen.length) {
     const reasons = [...new Set(skipped.map((s) => s.reason))].slice(0, 2).join("; ");
-    throw new Error(`Nobody needs a reminder right now${reasons ? ` (${reasons})` : ""}.`);
+    throw new UserError(`Nobody needs a reminder right now${reasons ? ` (${reasons})` : ""}.`);
   }
 
   const notes = await draftReminderNotes(

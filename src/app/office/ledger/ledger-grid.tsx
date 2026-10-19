@@ -18,6 +18,7 @@ import { toGridState } from "@/lib/ledger/query";
 import { Button, Card } from "@/components/ui";
 import { askLedgerAction } from "../actions";
 import { AG_GRID_LICENCE, CAN_GROUP } from "@/lib/ledger/licence";
+import { safeCsvCell } from "@/lib/ledger/csv";
 
 if (CAN_GROUP) LicenseManager.setLicenseKey(AG_GRID_LICENCE!);
 const modules = CAN_GROUP ? [AllEnterpriseModule] : [AllCommunityModule];
@@ -284,7 +285,10 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
         </div>
       </AgGridProvider>
       <div className="flex justify-end">
-        <Button variant="ghost" onClick={() => apiRef.current?.exportDataAsCsv({ fileName: "slip-ledger.csv" })}>
+        <Button variant="ghost" onClick={() => apiRef.current?.exportDataAsCsv({
+              fileName: "slip-ledger.csv",
+              processCellCallback: (p) => safeCsvCell(p.formatValue(p.value)),
+            })}>
           Export CSV
         </Button>
       </div>

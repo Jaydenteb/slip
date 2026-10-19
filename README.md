@@ -87,6 +87,8 @@ Tests check all of this:
 - [src/lib/reminders/select.test.ts](src/lib/reminders/select.test.ts): who gets a reminder and how firm it is, including that families who asked for support are never chased.
 - [tests/db/parent-scope.test.ts](tests/db/parent-scope.test.ts): one family's chat can't see or act on another family's invoices or children, and plan and withdrawal requests make no PayPal call.
 
+The [Security](#security) section below covers the rest: access control, injection, and the OWASP checks for web apps and AI.
+
 ## AG Grid
 
 The ledger ([src/app/office/ledger/ledger-grid.tsx](src/app/office/ledger/ledger-grid.tsx)) has one row per student per event. It has:
@@ -96,11 +98,75 @@ The ledger ([src/app/office/ledger/ledger-grid.tsx](src/app/office/ledger/ledger
 - **Ask the ledger:** Claude's answer is converted into AG Grid's own state and applied with `setFilterModel` and `applyColumnState`, covering filters, sort, visible columns and row grouping. Anything the grid can't do is reported back, not silently dropped (see [src/lib/ledger/query.ts](src/lib/ledger/query.ts) and its tests).
 - **Row grouping by class, with subtotal rows,** when an AG Grid Enterprise licence key is set. Without one, the ledger runs on AG Grid Community and leaves grouping out.
 
-## Keeping a public demo safe
+## Security
 
-- **Rate limits:** per family, per visitor and overall, on both the parent chat and Ask the ledger. Messages are capped at 1,000 characters and 30 turns per chat. The Anthropic key also has a hard spending limit.
-- **Families can only see their own data:** a family page and its chat only ever load data for the family that owns the link.
-- **Made-up data only.** There are no real schools, families or medical details. Only a consent tick is stored.
+Slip handles parents' money and children's names, so we reviewed it against the [OWASP Top 10](https://owasp.org/Top10/) for web apps and the [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/), and fixed what we found. Four reviews ran: access control (IDOR), payment integrity, AI and prompt injection, and general web security. This section covers who can reach what, and where each protection lives in the code.
+
+The demo itself uses a made-up school and made-up families, and payments run in the PayPal sandbox.
+
+### Who can reach what
+
+- **A parent** has a private link to their family page, with a 96-bit random token. Everything on the page, and every tool in its chat, loads that family from the token and filters by it. (The demo's Nguyen link is fixed so judges can open it from the home page. Every other family's link is random.)
+- **The office** has no sign-in in this demo, so anyone can open it. A real deployment adds staff sign-in (see below). Even so, every office action checks that the ids it's given belong to the school, and nothing reaches a family or moves money without an approval.
+- **Claude** sees text that people typed: a parent's messages, and the office's event descriptions. All of it is treated as data, and Claude never holds a tool that can reach PayPal.
+- **PayPal webhooks** can be sent by anyone. Each one is verified with PayPal before Slip acts on it.
+
+### Web app (OWASP Top 10)
+
+| Risk | What Slip does | Where |
+|---|---|---|
+| Broken access control and IDOR | <ul><li>Family pages, family actions and every parent-chat tool load the family from the link token and filter by it.</li><li>Office actions check that each id belongs to the school before using it, and approvals can only be decided within their own school.</li><li>A withdrawal only ever touches children who are on that family's invoice, whatever ids the request sends.</li></ul> | [family/[token]/actions.ts](src/app/family/[token]/actions.ts), [office/actions.ts](src/app/office/actions.ts), [withdrawals/service.ts](src/lib/withdrawals/service.ts), [executor/run.ts](src/lib/executor/run.ts) |
+| Insecure design (the money logic) | <ul><li>The approval gate, and atomic claims on each approval.</li><li>Retries skip any step the audit log shows was already done. Invoices that already went out are never sent again.</li><li>Withdrawals and payment plans re-check the money before running and stop if it has changed.</li><li>Only one withdrawal per invoice can be open at a time, enforced by a database lock.</li><li>A run that crashed part-way can be safely retried after 10 minutes.</li></ul> | [executor/gate.ts](src/lib/executor/gate.ts), [executor/run.ts](src/lib/executor/run.ts) |
+| Injection | <ul><li>Every database query is parameterised through Prisma.</li><li>React escapes all text, and Slip never uses `dangerouslySetInnerHTML`.</li><li>The CSV export neutralises cells that a spreadsheet would run as formulas.</li></ul> | [ledger/csv.ts](src/lib/ledger/csv.ts) |
+| Input validation | Server actions are public endpoints, so every argument is checked. The event the office confirms is validated again on the server: lengths, real dates, amounts above $0, and a deposit no bigger than the fee. | [lib/guard.ts](src/lib/guard.ts), [events/validate.ts](src/lib/events/validate.ts) |
+| Security misconfiguration | <ul><li>Response headers include a Content Security Policy, `frame-ancestors 'none'` (no clickjacking on the consent tick), `nosniff` and HSTS.</li><li>`Referrer-Policy: no-referrer` keeps family tokens out of other sites' logs.</li></ul> | [next.config.ts](next.config.ts) |
+| Authentication of webhooks | <ul><li>PayPal verifies every webhook signature before Slip acts. The check fails closed, and duplicate events are dropped.</li><li>A webhook body is never trusted: it only prompts Slip to re-read the invoice from PayPal.</li></ul> | [api/webhooks/paypal/route.ts](src/app/api/webhooks/paypal/route.ts) |
+| Logging | Every PayPal call is written to an audit log, whether it succeeds or fails, and the log is shown on the Activity page. A call that succeeded is never recorded as failed. | [executor/gate.ts](src/lib/executor/gate.ts) |
+| Error leaks | Internal errors such as PayPal response bodies and database messages are logged, not shown. People see a short, plain message. | [lib/errors.ts](src/lib/errors.ts) |
+| SSRF | PayPal's base URL is fixed, and ids are URL-encoded. | [paypal/rest.ts](src/lib/paypal/rest.ts) |
+| Secrets | <ul><li>All secrets live in environment variables, and `.env` is git-ignored.</li><li>The only value sent to the browser is the AG Grid licence key, which is meant to be public.</li></ul> | [.env.example](.env.example) |
+
+### AI (OWASP Top 10 for LLM Applications)
+
+| Risk | What Slip does |
+|---|---|
+| **LLM01 Prompt injection** | <ul><li>Even a successful injection can't move money. Claude's tools only *propose*, the tools are scoped to one family in code (not in the prompt), and a person approves every action.</li><li>System prompts say that tool results and event text are data, not instructions.</li><li>Anything a parent said reaches the office in a separate quote marked *unchecked*, with control characters and quote marks stripped, so it can't pose as Slip's own summary.</li></ul> |
+| **LLM02 Sensitive information disclosure** | <ul><li>The chat's tools can only read the one family's data, so there's nothing else to leak.</li><li>No medical details are collected. The chat asks parents to give health details to the office directly, and withdrawal reasons stay neutral ("Can't attend").</li></ul> |
+| **LLM05 Improper output handling** | <ul><li>Every structured output is validated against a zod schema.</li><li>Ask the ledger can only use known columns and operators.</li><li>Reminder wording is checked in code before the office even sees it: no links, email addresses or phone numbers, a length limit, and the offer of help must be there.</li><li>All AI text is rendered as plain text.</li></ul> |
+| **LLM06 Excessive agency** | The approval gate: each kind of approval may call only its own PayPal tools, and a hardship flag can call none. |
+| **LLM07 System prompt leakage** | The prompts hold no secrets, and every limit that matters is enforced in code, so a leaked prompt gives nothing away. |
+| **LLM09 Misinformation** | Slip states only the amounts and dates its tools return. A fixed note under the chat, not written by the AI, says only the office can change what's owed or approve a refund. |
+| **LLM10 Unbounded consumption** | <ul><li>Rate limits per family, per visitor, per action and overall.</li><li>Message length and chat length caps, at most 6 tool rounds per reply, and token limits on every call.</li><li>A hard spending limit on the Anthropic key.</li></ul> |
+| LLM03 Supply chain, LLM04 Data poisoning, LLM08 Vector weaknesses | <ul><li>Slip has no fine-tuning, no retrieval and no vector store.</li><li>Dependencies are locked, and every push runs in CI.</li></ul> |
+
+A conversation that stops part-way (for example, at the tool-round limit) is closed off cleanly, so it can't break the parent's next message ([`repairHistory`](src/lib/agent/parent.ts)).
+
+### Row-level security
+
+Slip scopes every query to the family or school in application code, and database tests check that scoping against a real Postgres. Postgres row-level security (RLS) would add a second layer for many schools: each request would set its school, and the database itself would refuse other schools' rows. It isn't in the demo, because the demo has one school and no sign-in. It's first on the list below.
+
+### What a real school deployment adds
+
+- **Staff sign-in** through the school's single sign-on, with roles, and a second approver for refunds above a set amount.
+- **Postgres row-level security** for each school, on top of the checks in the app.
+- **Shared rate limits** (Redis, for example) instead of in-memory ones, so the limits hold across several servers.
+- **Expiring family links** that the office can re-issue, or sign-in by the family's email.
+- **Retention rules:** chat threads are deleted once an event closes.
+- **A nonce-based Content Security Policy,** so no inline scripts are needed.
+
+### Security tests
+
+- [src/lib/executor/gate.test.ts](src/lib/executor/gate.test.ts): the gate refuses without an approved, executing item or with a tool that isn't allowed, and a call that succeeded is never recorded as failed.
+- [tests/db/parent-scope.test.ts](tests/db/parent-scope.test.ts): one family's chat can't see or act on another family's invoices or children.
+- [tests/db/office-safety.test.ts](tests/db/office-safety.test.ts):
+  - a withdrawal only names children on that family's invoice;
+  - two withdrawals drafted at once produce only one;
+  - an approval can't be decided from another school;
+  - a parent's words are kept apart from Slip's summary.
+- [src/lib/withdrawals/plan.test.ts](src/lib/withdrawals/plan.test.ts): ids that aren't on the invoice are ignored.
+- [src/lib/events/validate.test.ts](src/lib/events/validate.test.ts): negative or zero amounts, impossible deposits, bad dates and oversized text are refused.
+- [src/lib/reminders/draft.test.ts](src/lib/reminders/draft.test.ts): reminders with links, email addresses or phone numbers are refused, and every reminder must offer help.
+- [src/lib/ledger/csv.test.ts](src/lib/ledger/csv.test.ts), [src/lib/errors.test.ts](src/lib/errors.test.ts), [src/lib/agent/rate-limit.test.ts](src/lib/agent/rate-limit.test.ts) and [src/lib/agent/history.test.ts](src/lib/agent/history.test.ts): CSV formulas, error messages, quoting, client addresses and chat-history repair.
 
 ---
 

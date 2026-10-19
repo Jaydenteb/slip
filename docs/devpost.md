@@ -36,6 +36,7 @@ Slip is built for the school office, and gives each family a private page.
   - the SDK's tool runner for the parent chat, with tools scoped to one family.
 - **Ledger:** AG Grid, with live updates (`getRowId` and cell flashing), custom cell renderers, a pinned totals row, and grid state driven by the AI.
 - **App:** Next.js 16, Prisma, Postgres and Tailwind, hosted on Render.
+- **Security:** reviewed against the OWASP Top 10 for web apps and the OWASP Top 10 for LLM Applications. The main protections: tools scoped to one family in code, IDOR checks on every action, the AI's proposals kept apart from what parents typed, reminder wording checked in code, rate limits, and strict response headers. The README's Security section maps each risk to the code that handles it.
 - **Tests:** unit tests for the approval gate, invoice building, payment plans, reconciliation, reminders, withdrawals and the ledger query. Database tests prove one family's chat can't see or act on another family's data. All of it runs in GitHub Actions CI.
 
 Where to look in the code: the README lists every file where PayPal and the AI are used, at https://github.com/Jaydenteb/slip.

@@ -1,4 +1,5 @@
 import { splitInstalments, type Cents } from "../money";
+import { UserError } from "../errors";
 
 export type Frequency = "weekly" | "fortnightly" | "monthly";
 
@@ -9,8 +10,8 @@ const DAYS: Record<Exclude<Frequency, "monthly">, number> = { weekly: 7, fortnig
 // Splits what's still owing into equal instalments, the first due `firstDueOn`.
 // Dates are calendar days (YYYY-MM-DD); maths happens in UTC so time zones can't shift them.
 export function buildPlan(owing: Cents, count: number, frequency: Frequency, firstDueOn: string): Instalment[] {
-  if (owing <= 0) throw new Error("Nothing is owing on this invoice");
-  if (!Number.isInteger(count) || count < 2 || count > 12) throw new Error("A plan has between 2 and 12 instalments");
+  if (owing <= 0) throw new UserError("Nothing is owing on this invoice");
+  if (!Number.isInteger(count) || count < 2 || count > 12) throw new UserError("A plan has between 2 and 12 instalments");
   const amounts = splitInstalments(owing, count);
   const start = new Date(`${firstDueOn}T00:00:00Z`);
   return amounts.map((amount, i) => {

@@ -147,6 +147,11 @@ export function Chat({ token, initialTurns, firstName }: { token: string; initia
         </button>
       </form>
       {error && <p className="px-5 pb-3 text-sm text-danger">{error}</p>}
+      {/* Fixed text, not the AI: whatever Slip says, these stay true. */}
+      <p className="px-5 pb-3 text-xs text-ink-faint">
+        Only the school office can change what you owe or approve a refund. Please don&rsquo;t share health details here; give
+        them to the office directly.
+      </p>
     </Card>
   );
 }
