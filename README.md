@@ -30,8 +30,10 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
    - "Money's tight at the moment." Slip mentions the state's camps fund (CSEF) and privately flags the family to the office. It never decides anything about hardship itself.
 5. **Approve the plan.** Back in **Approvals**, approve the payment plan. Slip updates the PayPal invoice so the minimum payment becomes the first instalment.
 6. **Pay.** On the family page, click **Pay with PayPal** and pay the $85 deposit with the sandbox buyer:
-   - email: _(sandbox login added before submission)_
-   - password: _(added before submission)_
+   - email: `sb-f47efm53424610@personal.example.com`
+   - password: `M'=4i+=f`
+
+   This is a PayPal sandbox test account, not a real one.
 7. **Watch the ledger.** Open **Ledger**. The PayPal webhook updates the row and the changed cells flash. Then try **Ask the ledger**:
    - "Who in 4B hasn't paid the camp deposit yet?"
    - "Who owes more than $200?"
