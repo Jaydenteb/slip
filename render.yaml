@@ -1,9 +1,10 @@
 # Render Blueprint: one web service and one Postgres database.
-# Paid plans on purpose: free web services sleep and free databases expire, and judges
-# need the demo up and quick until judging ends on 15 Dec 2026.
+# Free plans while building. Before submission (by 9 Nov 2026) switch both to paid
+# (web 0.5c-512mb, database 0.1c-256mb): free web services sleep and free databases
+# expire, and judges need the demo up and quick until judging ends on 15 Dec 2026.
 databases:
   - name: slip-db
-    plan: 0.1c-256mb
+    plan: free
     region: oregon
     databaseName: slip
     user: slip
@@ -12,12 +13,13 @@ services:
   - type: web
     name: slip
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
     region: oregon
     buildCommand: npm ci && npm run build
-    # Brings the schema up to date, and seeds the demo school only on first deploy.
-    preDeployCommand: npx prisma db push --skip-generate && npx tsx prisma/seed-if-empty.ts
-    startCommand: npm start
+    # Brings the schema up to date and seeds the demo school only if it is empty, then
+    # starts the app. (Free plans have no pre-deploy step; on paid plans this can move
+    # to preDeployCommand.)
+    startCommand: npx prisma db push --skip-generate && npx tsx prisma/seed-if-empty.ts && npm start
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
