@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { parseEventDescription, type ParsedEvent } from "@/lib/events/parse";
 import { proposeInvoiceBatch, saveEvent } from "@/lib/events/service";
 import { approveAndExecute, rejectApproval } from "@/lib/executor/run";
+import { syncOpenInvoices } from "@/lib/payments/sync";
 
 // Demo build: there is no login, and the office is "the office". A real deployment
 // would check the signed-in staff member here before every action.
@@ -67,5 +68,16 @@ export async function rejectAction(approvalItemId: string): Promise<ActionResult
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   } finally {
     revalidatePath("/office", "layout");
+  }
+}
+
+export async function syncEventAction(eventId: string): Promise<ActionResult<{ checked: number; changed: number }>> {
+  try {
+    const result = await syncOpenInvoices({ eventId });
+    return { ok: true, data: { checked: result.checked, changed: result.changed } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Couldn't reach PayPal." };
+  } finally {
+    revalidatePath(`/office/events/${eventId}`);
   }
 }

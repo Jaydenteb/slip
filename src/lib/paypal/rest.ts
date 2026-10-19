@@ -45,6 +45,7 @@ export type PayPalInvoice = {
       payment_id?: string;
       method?: string;
       payment_date?: string;
+      payment_date_time?: string;
       amount?: { value: string; currency_code: string };
       note?: string;
     }[];

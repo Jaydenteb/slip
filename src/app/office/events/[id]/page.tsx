@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { db } from "@/lib/db";
 import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
 import { formatDay, formatDayRange } from "@/lib/format";
@@ -9,6 +9,8 @@ import { formatMoney, toCents } from "@/lib/money";
 import { invoiceStatus } from "@/lib/status";
 import { Badge, Card, Skeleton } from "@/components/ui";
 import { DraftInvoicesButton } from "./draft-invoices-button";
+import { SyncButton } from "./sync-button";
+import { syncOpenInvoices } from "@/lib/payments/sync";
 
 export default function EventPage({ params }: PageProps<"/office/events/[id]">) {
   return (
@@ -34,6 +36,9 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
     },
   });
   if (!event) notFound();
+
+  // Quietly catch up with PayPal after the page is sent, in case a webhook was missed.
+  after(() => syncOpenInvoices({ eventId: event.id, maxAgeMs: 60_000 }).catch(() => undefined));
 
   const currency = event.school.currency;
   const invoicedFamilies = new Set(event.invoices.map((i) => i.familyId));
@@ -64,12 +69,15 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
             {event.location && ` · ${event.location}`}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+        {live.length > 0 && <SyncButton eventId={event.id} />}
         {uninvoiced.size > 0 && !pendingBatch && <DraftInvoicesButton eventId={event.id} families={uninvoiced.size} />}
         {pendingBatch && (
           <Link href="/office/approvals" className="text-sm font-medium text-waiting hover:underline">
             Invoices waiting for your approval →
           </Link>
         )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

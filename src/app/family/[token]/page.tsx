@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
+import { syncOpenInvoices } from "@/lib/payments/sync";
 import { db } from "@/lib/db";
 import { formatDay, formatDayRange } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
@@ -44,6 +45,8 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
     },
   });
   if (!family) notFound();
+  // A parent coming back from paying should see it: catch up with PayPal in the background.
+  after(() => syncOpenInvoices({ familyId: family.id, maxAgeMs: 30_000 }).catch(() => undefined));
   const currency = family.school.currency;
 
   return (
