@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DEMO_FAMILY_TOKEN } from "@/lib/demo/seed";
 import { Logo } from "@/components/ui";
+import { ResetDemo } from "./reset-demo";
 
 export default function Home() {
   return (
@@ -40,9 +41,12 @@ export default function Home() {
         </Link>
       </div>
 
-      <p className="mt-12 text-sm text-ink-faint">
-        A demo school with made-up families. Payments run in the PayPal sandbox; no real money moves.
-      </p>
+      <div className="mt-12 grid gap-4 border-t border-line pt-6">
+        <p className="text-sm text-ink-faint">
+          A demo school with made-up families. Payments run in the PayPal sandbox; no real money moves.
+        </p>
+        <ResetDemo />
+      </div>
     </main>
   );
 }
