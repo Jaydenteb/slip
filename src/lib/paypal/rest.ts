@@ -54,6 +54,9 @@ export type PayPalInvoice = {
       note?: string;
     }[];
   };
+  refunds?: {
+    refund_amount?: { value: string; currency_code: string };
+  };
 };
 
 export function getInvoice(invoiceId: string) {

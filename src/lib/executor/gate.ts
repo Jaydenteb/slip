@@ -7,7 +7,8 @@ export const ALLOWED_TOOLS: Record<ApprovalKind, readonly PayPalToolName[]> = {
   INVOICE_BATCH: ["create_invoice", "send_invoice", "generate_invoice_qr_code", "get_invoice"],
   PAYMENT_PLAN: ["update_invoicing"],
   REMINDER_BATCH: ["send_invoice_reminder"],
-  REFUND: ["record_refund_for_invoice", "cancel_sent_invoice"],
+  // Withdrawing a child: cut the invoice down (or cancel it) and refund the difference.
+  REFUND: ["update_invoicing", "cancel_sent_invoice", "create_refund", "record_refund_for_invoice"],
   CASH_PAYMENT: ["record_payment_for_invoice"],
   HARDSHIP_FLAG: [],
 };

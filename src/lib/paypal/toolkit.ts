@@ -14,6 +14,7 @@ export const PAYPAL_TOOLS = [
   "record_payment_for_invoice",
   "record_refund_for_invoice",
   "update_invoicing",
+  "create_refund",
 ] as const;
 
 export type PayPalToolName = (typeof PAYPAL_TOOLS)[number];
@@ -46,6 +47,7 @@ function getToolkit() {
           recordRefund: true,
           update: true,
         },
+        payments: { createRefund: true },
       },
       context: { sandbox: env.paypalSandbox() },
     },
@@ -62,8 +64,10 @@ export async function runPayPalTool(name: PayPalToolName, args: unknown): Promis
   if (!parsed.success) throw new PayPalToolError(name, parsed.error.issues);
   const raw = await tool.execute(parsed.data, { toolCallId: name, messages: [] });
   const result = typeof raw === "string" ? safeJson(raw) : raw;
-  if (result && typeof result === "object" && "error" in result) {
-    throw new PayPalToolError(name, (result as { error: unknown }).error);
+  // Failures come back in two shapes: { error } and { ok: false, status, message }.
+  if (result && typeof result === "object" && ("error" in result || (result as { ok?: unknown }).ok === false)) {
+    const r = result as { error?: unknown; message?: unknown };
+    throw new PayPalToolError(name, r.error ?? r.message ?? result);
   }
   return result;
 }

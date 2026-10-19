@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { reconcile } from "./reconcile";
+import { reconcile, statusAfterRefunds } from "./reconcile";
 
 // Shapes taken from the day-1 sandbox spike.
 const partlyPaid = {
@@ -56,4 +56,19 @@ test("statuses Slip doesn't track leave the invoice alone", () => {
 
 test("marked-as-paid counts as paid", () => {
   assert.equal(reconcile({ id: "x", status: "MARKED_AS_PAID" }).status, "PAID");
+});
+
+test("refunds are taken off what's been paid", () => {
+  // From the sandbox: $135 paid, then $20 refunded through PayPal and $10 in cash.
+  const r = reconcile({ ...partlyPaid, status: "PARTIALLY_REFUNDED", refunds: { refund_amount: { currency_code: "AUD", value: "30.00" } } });
+  assert.equal(r.amountPaid, 10500);
+  assert.equal(r.amountRefunded, 3000);
+});
+
+test("a sibling still going keeps a paid or part-paid status after a refund", () => {
+  assert.equal(statusAfterRefunds("PARTIALLY_REFUNDED", 28500, 28500), "PAID");
+  assert.equal(statusAfterRefunds("PARTIALLY_REFUNDED", 28500, 8500), "PARTIALLY_PAID");
+  assert.equal(statusAfterRefunds("PARTIALLY_REFUNDED", 28500, 0), "SENT");
+  assert.equal(statusAfterRefunds("REFUNDED", 0, 0), "REFUNDED");
+  assert.equal(statusAfterRefunds("PARTIALLY_PAID", 28500, 8500), "PARTIALLY_PAID");
 });

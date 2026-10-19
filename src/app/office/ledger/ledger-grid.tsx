@@ -47,6 +47,7 @@ const STATUS_STYLE: Record<LedgerStatus, string> = {
   Paid: "bg-brand-tint text-brand-strong",
   Cancelled: "bg-line/60 text-ink-soft",
   Refunded: "bg-line/60 text-ink-soft",
+  Withdrawn: "bg-line/60 text-ink-soft",
 };
 
 function StatusCell({ value }: ICellRendererParams<LedgerRow, LedgerStatus>) {

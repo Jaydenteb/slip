@@ -36,7 +36,8 @@ export type ReconciledPayment = {
 
 export type Reconciled = {
   status: InvoiceStatus | null; // null: a PayPal status we don't track (e.g. DRAFT); leave ours alone
-  amountPaid: Cents;
+  amountPaid: Cents; // net of refunds
+  amountRefunded: Cents;
   payments: ReconciledPayment[];
 };
 
@@ -51,9 +52,21 @@ export function reconcile(invoice: PayPalInvoice): Reconciled {
       paidAt: new Date(t.payment_date_time ?? `${t.payment_date}T00:00:00Z`),
       note: t.note ?? null,
     }));
+  // PayPal keeps the gross paid amount after a refund and reports refunds separately.
+  const gross = invoice.payments?.paid_amount ? toCents(invoice.payments.paid_amount.value) : 0;
+  const refunded = invoice.refunds?.refund_amount ? toCents(invoice.refunds.refund_amount.value) : 0;
   return {
     status: STATUS[invoice.status] ?? null,
-    amountPaid: invoice.payments?.paid_amount ? toCents(invoice.payments.paid_amount.value) : 0,
+    amountPaid: gross - refunded,
+    amountRefunded: refunded,
     payments,
   };
+}
+
+// After a child is withdrawn, PayPal calls the invoice (partly) refunded even when a
+// sibling is still going. What the office needs to know is whether the rest is paid.
+export function statusAfterRefunds(status: InvoiceStatus, total: Cents, netPaid: Cents): InvoiceStatus {
+  if (status !== "REFUNDED" && status !== "PARTIALLY_REFUNDED") return status;
+  if (total === 0) return "REFUNDED";
+  return netPaid >= total ? "PAID" : netPaid > 0 ? "PARTIALLY_PAID" : "SENT";
 }

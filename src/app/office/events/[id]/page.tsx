@@ -10,6 +10,7 @@ import { invoiceStatus } from "@/lib/status";
 import { Badge, Card, Skeleton } from "@/components/ui";
 import { DraftInvoicesButton } from "./draft-invoices-button";
 import { DraftRemindersButton } from "./draft-reminders-button";
+import { WithdrawButton } from "./withdraw-button";
 import { SyncButton } from "./sync-button";
 import { syncOpenInvoices } from "@/lib/payments/sync";
 
@@ -54,7 +55,8 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
   const pendingReminders = waiting.some((w) => w.kind === "REMINDER_BATCH");
 
   const byClass = new Map<string, number>();
-  for (const e of event.enrolments) byClass.set(e.student.classroom.name, (byClass.get(e.student.classroom.name) ?? 0) + 1);
+  const going = event.enrolments.filter((e) => e.attending);
+  for (const e of going) byClass.set(e.student.classroom.name, (byClass.get(e.student.classroom.name) ?? 0) + 1);
 
   const live = event.invoices.filter((i) => i.status !== "PROPOSED");
   const billed = live.reduce((n, i) => n + toCents(i.total), 0);
@@ -112,7 +114,7 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
             ))}
             <div>
               <dt className="text-ink-faint">Going</dt>
-              <dd className="mt-0.5 font-medium">{event.enrolments.length} students</dd>
+              <dd className="mt-0.5 font-medium">{going.length} students</dd>
               <dd className="text-ink-soft">
                 {[...byClass.entries()]
                   .sort()
@@ -151,6 +153,7 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
                 <th className="px-5 py-3 text-right font-medium">Total</th>
                 <th className="px-5 py-3 text-right font-medium">Paid</th>
                 <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -159,11 +162,31 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
                 return (
                   <tr key={inv.id}>
                     <td className="px-5 py-3 font-medium">{inv.family.familyName}</td>
-                    <td className="px-5 py-3 text-ink-soft">{inv.lines.map((l) => l.student.firstName).join(", ")}</td>
+                    <td className="px-5 py-3 text-ink-soft">
+                      {[
+                        ...inv.lines.map((l) => l.student.firstName),
+                        ...event.enrolments
+                          .filter((e) => !e.attending && e.student.familyId === inv.familyId)
+                          .map((e) => `${e.student.firstName} (not going)`),
+                      ].join(", ")}
+                    </td>
                     <td className="px-5 py-3 text-right tabular-nums">{formatMoney(toCents(inv.total), currency)}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{formatMoney(toCents(inv.amountPaid), currency)}</td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      {formatMoney(toCents(inv.amountPaid), currency)}
+                      {toCents(inv.amountRefunded) > 0 && (
+                        <span className="block text-xs text-ink-faint">{formatMoney(toCents(inv.amountRefunded), currency)} refunded</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <Badge tone={s.tone}>{s.label}</Badge>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {["SENT", "PARTIALLY_PAID", "PAID"].includes(inv.status) && inv.lines.length > 0 && (
+                        <WithdrawButton
+                          invoiceId={inv.id}
+                          students={inv.lines.map((l) => ({ id: l.studentId, name: l.student.firstName }))}
+                        />
+                      )}
                     </td>
                   </tr>
                 );

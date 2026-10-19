@@ -14,6 +14,7 @@ import { askLedger } from "@/lib/ledger/ask";
 import type { LedgerQuery } from "@/lib/ledger/query";
 import { loadLedgerRows } from "@/lib/ledger/rows";
 import { proposeReminderBatch } from "@/lib/reminders/service";
+import { proposeWithdrawal } from "@/lib/withdrawals/service";
 
 // Demo build: there is no login, and the office is "the office". A real deployment
 // would check the signed-in staff member here before every action.
@@ -68,6 +69,19 @@ export async function proposeRemindersAction(eventId: string): Promise<ActionRes
   } catch (err) {
     console.error(err);
     return { ok: false, error: err instanceof Error ? err.message : "Couldn't draft the reminders." };
+  }
+  revalidatePath(`/office/events/${eventId}`);
+  redirect("/office/approvals");
+}
+
+export async function proposeWithdrawalAction(invoiceId: string, studentIds: string[], reason: string): Promise<ActionResult> {
+  if (!studentIds.length) return { ok: false, error: "Choose who isn't going." };
+  let eventId: string;
+  try {
+    const item = await proposeWithdrawal({ invoiceId, studentIds, reason: reason.trim().slice(0, 200) || null, proposedBy: "office" });
+    eventId = item.eventId!;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Couldn't draft the withdrawal." };
   }
   revalidatePath(`/office/events/${eventId}`);
   redirect("/office/approvals");

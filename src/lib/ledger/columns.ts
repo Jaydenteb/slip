@@ -9,6 +9,7 @@ export const LEDGER_STATUSES = [
   "Paid",
   "Cancelled",
   "Refunded",
+  "Withdrawn",
 ] as const;
 
 export type LedgerStatus = (typeof LEDGER_STATUSES)[number];
@@ -24,7 +25,7 @@ export type LedgerRow = {
   paid: number;
   owing: number;
   status: LedgerStatus;
-  depositPaid: "Yes" | "No" | "No deposit";
+  depositPaid: "Yes" | "No" | "No deposit" | "Not going";
   onPlan: "Yes" | "No";
   needsSupport: "Yes" | "No";
   consent: "Yes" | "No" | "Not needed";
@@ -44,7 +45,7 @@ export const LEDGER_COLUMNS = {
   paid: { label: "Paid", kind: "number", about: "Paid so far for this student, in dollars" },
   owing: { label: "Owing", kind: "number", about: "Still owing for this student, in dollars" },
   status: { label: "Status", kind: "text", about: `One of: ${LEDGER_STATUSES.join(", ")}` },
-  depositPaid: { label: "Deposit paid", kind: "text", about: "Yes, No, or No deposit" },
+  depositPaid: { label: "Deposit paid", kind: "text", about: "Yes, No, No deposit, or Not going (withdrawn)" },
   onPlan: { label: "Payment plan", kind: "text", about: "Yes if the family has an agreed payment plan" },
   needsSupport: { label: "Support", kind: "text", about: "Yes if the family has asked for help and the office hasn't followed up yet" },
   consent: { label: "Consent", kind: "text", about: "Yes, No, or Not needed" },

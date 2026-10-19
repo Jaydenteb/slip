@@ -41,7 +41,8 @@ export async function loadLedgerRows(schoolId: string): Promise<LedgerRow[]> {
     const fee = e.event.feeItems.reduce((n, f) => n + toCents(f.amount), 0);
     const depositEach = e.event.feeItems.reduce((n, f) => n + (f.depositAmount ? toCents(f.depositAmount) : 0), 0);
     const invoice = e.event.invoices.find((i) => i.familyId === s.familyId);
-    const lineCents = invoice?.lines.filter((l) => l.studentId === s.id).reduce((n, l) => n + toCents(l.amount), 0) ?? fee;
+    // A withdrawn child's line comes off the invoice, so they owe (and are owed) nothing here.
+    const lineCents = !e.attending ? 0 : (invoice?.lines.filter((l) => l.studentId === s.id).reduce((n, l) => n + toCents(l.amount), 0) ?? fee);
     const invoiceTotal = invoice ? toCents(invoice.total) : 0;
     const paidCents = invoice && invoiceTotal > 0 ? Math.round((toCents(invoice.amountPaid) * lineCents) / invoiceTotal) : 0;
     const methods = new Set(invoice?.payments.map((p) => (p.method === "PAYPAL" ? "PayPal" : p.method === "CASH" ? "Cash" : "Other")));
@@ -57,8 +58,8 @@ export async function loadLedgerRows(schoolId: string): Promise<LedgerRow[]> {
       amount: lineCents / 100,
       paid: paidCents / 100,
       owing: (lineCents - paidCents) / 100,
-      status: invoice ? STATUS[invoice.status] : "Not invoiced",
-      depositPaid: depositEach === 0 ? "No deposit" : paidCents >= depositEach ? "Yes" : "No",
+      status: !e.attending ? "Withdrawn" : invoice ? STATUS[invoice.status] : "Not invoiced",
+      depositPaid: !e.attending ? "Not going" : depositEach === 0 ? "No deposit" : paidCents >= depositEach ? "Yes" : "No",
       onPlan: invoice?.plan ? "Yes" : "No",
       needsSupport: support.has(s.familyId) ? "Yes" : "No",
       consent: e.event.needsConsent ? (e.consentGiven ? "Yes" : "No") : "Not needed",

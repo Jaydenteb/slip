@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
 import type { InvoiceBatchPayload } from "@/lib/executor/run";
 import type { ReminderBatchPayload } from "@/lib/reminders/service";
+import type { WithdrawalPayload } from "@/lib/withdrawals/service";
 import { TIER_LABEL, type ReminderTier } from "@/lib/reminders/select";
 import { formatMoment } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
@@ -64,6 +65,7 @@ async function Approvals() {
                 <pre className="mt-4 overflow-x-auto rounded-lg bg-danger-tint/60 p-3 text-xs whitespace-pre-wrap text-danger">{item.error}</pre>
               )}
               {item.kind === "INVOICE_BATCH" && <InvoiceBatchDetail payload={item.payload as InvoiceBatchPayload} />}
+              {item.kind === "REFUND" && <WithdrawalDetail payload={item.payload as unknown as WithdrawalPayload} />}
               {item.kind === "REMINDER_BATCH" && <ReminderBatchDetail payload={item.payload as unknown as ReminderBatchPayload} />}
             </Card>
           ))
@@ -199,5 +201,30 @@ function ReminderBatchDetail({ payload }: { payload: ReminderBatchPayload }) {
         </div>
       </details>
     </div>
+  );
+}
+
+// Exactly what approving will do, step by step, so nothing about the money is a surprise.
+function WithdrawalDetail({ payload }: { payload: WithdrawalPayload }) {
+  const { plan } = payload;
+  const steps = [
+    plan.cancel
+      ? "Cancel the PayPal invoice (the family is told by email)"
+      : plan.paypalItems.length
+        ? `Update the PayPal invoice to: ${plan.paypalItems.map((i) => `${i.name} ${formatMoney(i.amount)}`).join(", ")}`
+        : null,
+    ...plan.refundSteps.map((s) =>
+      s.kind === "paypal"
+        ? `Refund ${formatMoney(s.amount)} to the family's PayPal account`
+        : `Record ${formatMoney(s.amount)} handed back (${s.method.toLowerCase().replace("_", " ")})`,
+    ),
+    `Mark ${plan.withdrawn.join(" and ")} as not going`,
+  ].filter((s): s is string => s !== null);
+  return (
+    <ol className="mt-4 grid list-decimal gap-1 rounded-lg border border-line bg-paper py-3 pr-4 pl-9 text-sm text-ink-soft">
+      {steps.map((s) => (
+        <li key={s}>{s}</li>
+      ))}
+    </ol>
   );
 }

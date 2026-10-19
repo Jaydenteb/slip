@@ -110,3 +110,22 @@ test("a support flag is recorded against this family only", async () => {
   assert.equal(flags.length, 1);
   assert.equal(flags[0].familyId, familyB);
 });
+
+test("a family can't withdraw another family's child", async () => {
+  const before = await db.approvalItem.count({ where: { schoolId: SCHOOL, kind: "REFUND" } });
+  const other = await tool(familyA, "request_withdrawal").run({ invoiceId: invoiceB, children: ["Bo"], reason: null });
+  assert.match(String(other), /can't be changed/);
+  const notTheirs = await tool(familyA, "request_withdrawal").run({ invoiceId: invoiceA, children: ["Bo"], reason: null });
+  assert.match(String(notTheirs), /None of those children/);
+  assert.equal(await db.approvalItem.count({ where: { schoolId: SCHOOL, kind: "REFUND" } }), before);
+});
+
+test("a withdrawal request only creates an approval: no PayPal call", async () => {
+  const reply = await tool(familyA, "request_withdrawal").run({ invoiceId: invoiceA, children: ["ada"], reason: "Can't attend" });
+  assert.match(String(reply), /Sent to the office/);
+  const item = await db.approvalItem.findFirstOrThrow({ where: { schoolId: SCHOOL, kind: "REFUND" } });
+  assert.equal(item.status, "PENDING");
+  assert.equal(item.familyId, familyA);
+  assert.match(item.summary, /cancelled/); // nothing paid, only child: the invoice is cancelled
+  assert.equal(await db.agentAction.count({ where: { schoolId: SCHOOL, action: { startsWith: "paypal." } } }), 0);
+});

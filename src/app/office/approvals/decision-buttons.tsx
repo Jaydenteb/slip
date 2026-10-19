@@ -9,6 +9,7 @@ const approveLabel: Partial<Record<ApprovalKind, string>> = {
   INVOICE_BATCH: "Approve & send",
   PAYMENT_PLAN: "Approve plan",
   REMINDER_BATCH: "Approve & send reminders",
+  REFUND: "Approve withdrawal",
   HARDSHIP_FLAG: "Mark as handled",
 };
 

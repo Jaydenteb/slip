@@ -25,7 +25,7 @@ export const approvalKind: Record<ApprovalKind, string> = {
   INVOICE_BATCH: "Invoices",
   PAYMENT_PLAN: "Payment plan",
   REMINDER_BATCH: "Reminders",
-  REFUND: "Refund",
+  REFUND: "Withdrawal",
   CASH_PAYMENT: "Cash payment",
   HARDSHIP_FLAG: "Family needs support",
 };

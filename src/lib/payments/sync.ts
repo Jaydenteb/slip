@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { fromCents, toCents } from "../money";
 import { getInvoice } from "../paypal/rest";
-import { reconcile } from "./reconcile";
+import { reconcile, statusAfterRefunds } from "./reconcile";
 
 // Brings Slip's copy of an invoice up to date with PayPal. Safe to run any time and
 // any number of times: payments are keyed by PayPal's payment id.
@@ -15,8 +15,9 @@ export async function syncInvoice(invoiceId: string, actor: "sync" | "webhook" =
     (await db.payment.findMany({ where: { invoiceId }, select: { paypalPaymentId: true } })).map((p) => p.paypalPaymentId),
   );
   const newPayments = live.payments.filter((p) => !known.has(p.paypalPaymentId));
-  const statusChanged = live.status !== null && live.status !== invoice.status;
-  const paidChanged = live.amountPaid !== toCents(invoice.amountPaid);
+  const status = live.status && statusAfterRefunds(live.status, toCents(invoice.total), live.amountPaid);
+  const statusChanged = status !== null && status !== invoice.status;
+  const paidChanged = live.amountPaid !== toCents(invoice.amountPaid) || live.amountRefunded !== toCents(invoice.amountRefunded);
 
   await db.$transaction(async (tx) => {
     for (const p of newPayments) {
@@ -29,8 +30,9 @@ export async function syncInvoice(invoiceId: string, actor: "sync" | "webhook" =
     await tx.invoice.update({
       where: { id: invoiceId },
       data: {
-        ...(live.status ? { status: live.status } : {}),
+        ...(status ? { status } : {}),
         amountPaid: fromCents(live.amountPaid),
+        amountRefunded: fromCents(live.amountRefunded),
         lastSyncedAt: new Date(),
       },
     });
@@ -42,8 +44,9 @@ export async function syncInvoice(invoiceId: string, actor: "sync" | "webhook" =
           action: "ledger.updated",
           input: { paypalInvoiceId: invoice.paypalInvoiceId } as Prisma.InputJsonValue,
           output: {
-            status: live.status,
+            status,
             amountPaid: fromCents(live.amountPaid),
+            amountRefunded: fromCents(live.amountRefunded),
             newPayments: newPayments.map((p) => ({ method: p.method, amount: fromCents(p.amount) })),
           } as Prisma.InputJsonValue,
         },

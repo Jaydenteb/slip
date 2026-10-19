@@ -1,12 +1,13 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { fromCents, toCents } from "../money";
 import { getInvoice } from "../paypal/rest";
-import { syncOpenInvoices } from "../payments/sync";
 import { runPayPalTool } from "../paypal/toolkit";
 import { createGatedPayPal } from "./gate";
 import type { PaymentPlanPayload } from "../agent/parent";
 import type { ReminderBatchPayload } from "../reminders/service";
+import { joinNames, loadForWithdrawal, type WithdrawalPayload } from "../withdrawals/service";
+import { syncInvoice, syncOpenInvoices } from "../payments/sync";
 
 // The executor: runs an approval item's actions after a person approves it. This is
 // the only code that moves money or contacts parents, and it only does so through
@@ -53,6 +54,9 @@ export async function approveAndExecute(approvalItemId: string, decidedBy: strin
         break;
       case "PAYMENT_PLAN":
         await applyPaymentPlan(item.id, item.payload as unknown as PaymentPlanPayload);
+        break;
+      case "REFUND":
+        await applyWithdrawal(item.id, item.payload as unknown as WithdrawalPayload);
         break;
       case "REMINDER_BATCH":
         await sendReminderBatch(item.id, item.payload as unknown as ReminderBatchPayload);
@@ -165,6 +169,85 @@ async function sendReminderBatch(approvalItemId: string, payload: ReminderBatchP
   if (failures.length) {
     throw new Error(`${failures.length} of ${invoices.length} reminders didn't send. Approve again to retry them.\n${failures.join("\n")}`);
   }
+}
+
+// Withdrawing children: the PayPal invoice is cut down (or cancelled if nothing was paid),
+// any refund goes back the way it came, then Slip's own records follow.
+async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayload) {
+  const { inv } = await loadForWithdrawal(payload.invoiceId);
+  const event = await db.event.findUniqueOrThrow({ where: { id: inv.eventId }, include: { school: true, feeItems: true } });
+  const { plan } = payload;
+  const done = await db.agentAction.findMany({ where: { approvalItemId, ok: true }, select: { action: true, input: true } });
+  const did = (action: string, match: (input: Record<string, unknown>) => boolean = () => true) =>
+    done.some((d) => d.action === action && match((d.input ?? {}) as Record<string, unknown>));
+  const refundedHere = done
+    .filter((d) => d.action === "paypal.create_refund" || d.action === "paypal.record_refund_for_invoice")
+    .reduce((n, d) => n + toCents(((d.input as { amount?: { value: string } }).amount?.value) ?? "0"), 0);
+
+  // Stop if money moved since the office looked at this (refunds from a retry don't count).
+  const gross = toCents(inv.amountPaid) + toCents(inv.amountRefunded);
+  if (gross !== payload.grossPaid || toCents(inv.amountRefunded) !== payload.refundedSoFar + refundedHere) {
+    throw new Error("Payments on this invoice changed since the withdrawal was drafted. Reject it and draft it again.");
+  }
+  const paypalId = inv.paypalInvoiceId!;
+  const currency = event.school.currency;
+
+  if (plan.cancel) {
+    if (inv.status !== "CANCELLED" && !did("paypal.cancel_sent_invoice")) {
+      await gated(approvalItemId, "cancel_sent_invoice", { invoice_id: paypalId, send_to_recipient: true });
+    }
+  } else if (plan.paypalItems.length && !did("paypal.update_invoicing")) {
+    const note = `${invoiceNote(event)} ${joinNames(plan.withdrawn)} withdrawn${plan.refund ? `; ${fromCents(plan.refund)} ${currency} refunded` : ""}.`;
+    const live = await getInvoice(paypalId);
+    const fields = invoiceFields(event, inv, note, plan.minimum);
+    await gated(approvalItemId, "update_invoicing", {
+      resource_type: "invoice",
+      invoice_update: {
+        invoice_id: paypalId,
+        invoice_number: live.detail?.invoice_number,
+        invoice_date: live.detail?.invoice_date,
+        send_to_recipient: true,
+        ...fields,
+        items: plan.paypalItems.map((i) => ({ name: i.name, quantity: "1", unit_amount: { currency_code: currency, value: fromCents(i.amount) } })),
+      },
+    });
+  }
+
+  for (const step of plan.refundSteps) {
+    const amount = { currency_code: currency, value: fromCents(step.amount) };
+    if (step.kind === "paypal") {
+      if (did("paypal.create_refund", (i) => i.capture_id === step.captureId)) continue;
+      await gated(approvalItemId, "create_refund", {
+        capture_id: step.captureId,
+        amount,
+        invoice_id: paypalId,
+        note_to_payer: `${event.title}: refund for ${joinNames(plan.withdrawn)}.`,
+      });
+    } else {
+      if (did("paypal.record_refund_for_invoice")) continue;
+      await gated(approvalItemId, "record_refund_for_invoice", {
+        invoice_id: paypalId,
+        method: step.method,
+        refund_date: todayInMelbourne(),
+        amount,
+      });
+    }
+  }
+
+  await db.$transaction([
+    db.invoiceLine.deleteMany({ where: { invoiceId: inv.id, studentId: { in: payload.studentIds } } }),
+    db.invoice.update({
+      where: { id: inv.id },
+      data: {
+        total: fromCents(plan.remainingTotal),
+        minimumPayment: plan.minimum != null ? fromCents(plan.minimum) : null,
+        plan: Prisma.DbNull,
+        ...(plan.cancel ? { status: "CANCELLED" } : {}),
+      },
+    }),
+    db.enrolment.updateMany({ where: { eventId: inv.eventId, studentId: { in: payload.studentIds } }, data: { attending: false } }),
+  ]);
+  await syncInvoice(inv.id);
 }
 
 type InvoiceForPayPal = Prisma.InvoiceGetPayload<{ include: { family: true; lines: true } }>;

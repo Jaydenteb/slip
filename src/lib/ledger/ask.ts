@@ -13,6 +13,7 @@ ${Object.entries(LEDGER_COLUMNS)
 Rules:
 - Use exact values from the lists you're given for event, className and status. For an event, prefer "contains" with a distinctive word from its title.
 - "Hasn't paid" usually means status is not Paid (and not Cancelled or Refunded). "Hasn't paid the deposit" means depositPaid equals No.
+- Withdrawn students aren't going: leave them out of questions about who owes, hasn't paid or hasn't given consent (status notEqual Withdrawn).
 - Sort so the rows the office most needs to act on come first.
 - Choose a handful of columns that answer the question; always include what you filter on.
 - If the question asks to show everything or reset, return no filters, no sort, columns null and groupBy null.

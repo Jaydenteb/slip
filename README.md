@@ -27,6 +27,7 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
 4. **Be a parent.** Click **View as parent** to open the Nguyen family page. Ask Slip:
    - "How much do I owe and when?"
    - "Can I pay the rest weekly?" Slip proposes a plan. It doesn't decide it.
+   - "Leo can't come to camp any more." Slip works out what changes (here the invoice drops to $285 for Ava; anything already paid beyond that would be refunded) and asks the office to approve the withdrawal. It keeps the reason neutral and never records medical details.
    - "Money's tight at the moment." Slip mentions the state's camps fund (CSEF) and privately flags the family to the office. It never decides anything about hardship itself.
 5. **Approve the plan.** Back in **Approvals**, approve the payment plan. Slip updates the PayPal invoice so the minimum payment becomes the first instalment.
 6. **Pay.** On the family page, click **Pay with PayPal** and pay the $85 deposit with the sandbox buyer:
@@ -51,6 +52,7 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
 | PayPal Agent Toolkit: `create_invoice`, `send_invoice`, `update_invoicing`, `record_payment_for_invoice` and more | [src/lib/paypal/toolkit.ts](src/lib/paypal/toolkit.ts) (`runPayPalTool` checks the arguments against each tool's own schema) |
 | Sending an approved invoice batch: one invoice per family, partial payments with a minimum | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`sendInvoiceBatch`, `invoiceFields`) |
 | Applying an approved payment plan to a live invoice | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`applyPaymentPlan`) |
+| Withdrawing a child after approval: the PayPal invoice is cut down (`update_invoicing`) or cancelled (`cancel_sent_invoice`), PayPal payments are refunded (`create_refund`) and cash handed back is recorded (`record_refund_for_invoice`). If payments changed since the office looked, it stops | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`applyWithdrawal`), [src/lib/withdrawals/plan.ts](src/lib/withdrawals/plan.ts) |
 | Sending an approved batch of payment reminders (`send_invoice_reminder`), syncing first so nobody who just paid is chased | [src/lib/executor/run.ts](src/lib/executor/run.ts) (`sendReminderBatch`) |
 | Invoicing REST v2: reading an invoice for Sync, and verifying webhook signatures | [src/lib/paypal/rest.ts](src/lib/paypal/rest.ts) (`getInvoice`, `verifyWebhookSignature`) |
 | Webhook receiver: verified, de-duplicated by event id, then a sync | [src/app/api/webhooks/paypal/route.ts](src/app/api/webhooks/paypal/route.ts) |
@@ -65,7 +67,7 @@ All calls use Claude Opus 5.5 (`claude-opus-5-5`) through the official Anthropic
 | Feature | How | Where |
 |---|---|---|
 | Plain-English event setup | Structured outputs with a zod schema. Returns fees, deposits, dates, classes, plus the assumptions and questions it has | [src/lib/events/parse.ts](src/lib/events/parse.ts) |
-| Parent chat | The SDK's tool runner with three tools, all scoped to one family: read the family overview, request a payment plan, flag for support | [src/lib/agent/parent.ts](src/lib/agent/parent.ts) |
+| Parent chat | The SDK's tool runner with four tools, all scoped to one family: read the family overview, request a payment plan, request a withdrawal, flag for support | [src/lib/agent/parent.ts](src/lib/agent/parent.ts) |
 | Payment reminders | Plain rules in [select.ts](src/lib/reminders/select.ts) decide who gets a reminder and how firm it is: a friendly nudge, overdue, or final. Families who asked for support are never chased. Claude writes one note per tier with structured outputs, and every note offers help in confidence | [src/lib/reminders/draft.ts](src/lib/reminders/draft.ts), [src/lib/reminders/service.ts](src/lib/reminders/service.ts) |
 | Ask the ledger | Structured outputs that return a ledger query. [toGridState](src/lib/ledger/query.ts) converts it into AG Grid filter, column and row-grouping state | [src/lib/ledger/ask.ts](src/lib/ledger/ask.ts), [src/app/office/ledger/ledger-grid.tsx](src/app/office/ledger/ledger-grid.tsx) |
 
@@ -75,14 +77,15 @@ All calls use Claude Opus 5.5 (`claude-opus-5-5`) through the official Anthropic
 - **Every PayPal write goes through one gate,** in [src/lib/executor/gate.ts](src/lib/executor/gate.ts). `createGatedPayPal` refuses to call PayPal unless:
   - a person has approved the item,
   - the item has been claimed for execution, and
-  - the tool is on the allow-list for that kind of approval (`ALLOWED_TOOLS`). An invoice batch can create and send invoices; a payment plan can only update one; a reminder batch can only send reminders; a hardship flag can call nothing.
+  - the tool is on the allow-list for that kind of approval (`ALLOWED_TOOLS`). An invoice batch can create and send invoices; a payment plan can only update one; a reminder batch can only send reminders; a withdrawal can cut down, cancel or refund that one invoice; a hardship flag can call nothing.
 - **Approving runs the executor, not the model.** See `approveAndExecute` in [src/lib/executor/run.ts](src/lib/executor/run.ts). Claiming an approval is atomic, so a double-click can't send a batch twice.
 - **Every PayPal call is audited,** whether it succeeds or fails, and listed on the **Activity** page.
 
 Tests check all of this:
 - [src/lib/executor/gate.test.ts](src/lib/executor/gate.test.ts): the gate refuses with no approval, a pending approval, a rejected approval, or a tool that isn't allowed, and it audits failures.
+- [src/lib/withdrawals/plan.test.ts](src/lib/withdrawals/plan.test.ts): what a withdrawal does to the invoice and where each refund goes.
 - [src/lib/reminders/select.test.ts](src/lib/reminders/select.test.ts): who gets a reminder and how firm it is, including that families who asked for support are never chased.
-- [tests/db/parent-scope.test.ts](tests/db/parent-scope.test.ts): one family's chat can't see or act on another family's invoices, and a plan request makes no PayPal call.
+- [tests/db/parent-scope.test.ts](tests/db/parent-scope.test.ts): one family's chat can't see or act on another family's invoices or children, and plan and withdrawal requests make no PayPal call.
 
 ## AG Grid
 

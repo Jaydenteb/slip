@@ -104,6 +104,9 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
                       <span className="font-medium tabular-nums">{formatMoney(paid, currency)}</span>
                       <span className="text-ink-soft"> of {formatMoney(total, currency)}</span>
                     </p>
+                    {toCents(inv.amountRefunded) > 0 && (
+                      <p className="text-ink-soft">Refunded {formatMoney(toCents(inv.amountRefunded), currency)}</p>
+                    )}
                     {owing > 0 && next && (
                       <p className="text-ink-soft">
                         Next payment {formatMoney(next.amount, currency)} by {formatDay(new Date(`${next.dueOn}T00:00:00Z`))}
