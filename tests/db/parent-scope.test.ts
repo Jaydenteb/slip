@@ -14,7 +14,8 @@ let invoiceB: string;
 function tool(familyId: string, name: string) {
   const t = familyTools(familyId).find((x) => x.name === name);
   assert.ok(t, `tool ${name} exists`);
-  return t;
+  // Call it the way the tool runner does: with the model's JSON input.
+  return t as unknown as { run: (args: object) => Promise<unknown> };
 }
 
 before(async () => {
