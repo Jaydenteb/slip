@@ -36,7 +36,11 @@ async function paypalFetch<T>(path: string, init: RequestInit = {}): Promise<T> 
 export type PayPalInvoice = {
   id: string;
   status: string; // DRAFT | SENT | SCHEDULED | PAID | MARKED_AS_PAID | CANCELLED | REFUNDED | PARTIALLY_PAID | PARTIALLY_REFUNDED | ...
-  detail?: { metadata?: { recipient_view_url?: string; invoicer_view_url?: string } };
+  detail?: {
+    invoice_number?: string;
+    invoice_date?: string;
+    metadata?: { recipient_view_url?: string; invoicer_view_url?: string };
+  };
   amount?: { value: string; currency_code: string };
   due_amount?: { value: string; currency_code: string };
   payments?: {

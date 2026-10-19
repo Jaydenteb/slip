@@ -4,6 +4,7 @@ import { fromCents, toCents } from "../money";
 import { getInvoice } from "../paypal/rest";
 import { runPayPalTool } from "../paypal/toolkit";
 import { createGatedPayPal } from "./gate";
+import type { PaymentPlanPayload } from "../agent/parent";
 
 // The executor: runs an approval item's actions after a person approves it. This is
 // the only code that moves money or contacts parents, and it only does so through
@@ -47,6 +48,9 @@ export async function approveAndExecute(approvalItemId: string, decidedBy: strin
     switch (item.kind) {
       case "INVOICE_BATCH":
         await sendInvoiceBatch(item.id, item.payload as InvoiceBatchPayload);
+        break;
+      case "PAYMENT_PLAN":
+        await applyPaymentPlan(item.id, item.payload as unknown as PaymentPlanPayload);
         break;
       case "HARDSHIP_FLAG":
         // Nothing to run: approving a hardship flag just marks it as handled by a person.
@@ -96,31 +100,9 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
       let paypalId = inv.paypalInvoiceId;
       // Create once. If a previous attempt created it but failed to send, reuse it.
       if (!paypalId) {
-        const [given, ...rest] = inv.family.contactName.split(" ");
         const created = await gated(approvalItemId, "create_invoice", {
-          currency_code: event.school.currency,
           invoice_date: todayInMelbourne(),
-          reference: `${event.title} · ${inv.family.familyName} family`,
-          note,
-          invoicer_business_name: event.school.name,
-          invoicer_email_address: event.school.email,
-          invoicer_country_code: event.school.countryCode,
-          primary_recipients: [
-            {
-              billing_info: {
-                name: { given_name: given, surname: rest.join(" ") || inv.family.familyName },
-                ...(inv.family.email ? { email_address: inv.family.email } : {}),
-              },
-            },
-          ],
-          items: inv.lines.map((l) => ({
-            name: l.label,
-            quantity: "1",
-            unit_amount: { currency_code: event.school.currency, value: fromCents(toCents(l.amount)) },
-          })),
-          ...(inv.minimumPayment
-            ? { allow_partial_payment: true, minimum_partial_payment_amount: fromCents(toCents(inv.minimumPayment)) }
-            : {}),
+          ...invoiceFields(event, inv, note, inv.minimumPayment ? toCents(inv.minimumPayment) : null),
         });
         paypalId = invoiceIdFrom(created);
         await db.invoice.update({ where: { id: inv.id }, data: { paypalInvoiceId: paypalId } });
@@ -145,6 +127,72 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
     throw new Error(`${failures.length} of ${invoices.length} invoices didn't send. Approve again to retry them.\n${failures.join("\n")}`);
   }
   await db.event.update({ where: { id: event.id }, data: { status: "OPEN" } });
+}
+
+type InvoiceForPayPal = Prisma.InvoiceGetPayload<{ include: { family: true; lines: true } }>;
+type EventForPayPal = Prisma.EventGetPayload<{ include: { school: true } }>;
+
+// The PayPal invoice fields Slip controls, shared by create and update so they can't drift.
+function invoiceFields(event: EventForPayPal, inv: InvoiceForPayPal, note: string, minimum: number | null) {
+  const [given, ...rest] = inv.family.contactName.split(" ");
+  const currency = event.school.currency;
+  return {
+    currency_code: currency,
+    reference: `${event.title} · ${inv.family.familyName} family`,
+    note,
+    invoicer_business_name: event.school.name,
+    invoicer_email_address: event.school.email,
+    invoicer_country_code: event.school.countryCode,
+    primary_recipients: [
+      {
+        billing_info: {
+          name: { given_name: given, surname: rest.join(" ") || inv.family.familyName },
+          ...(inv.family.email ? { email_address: inv.family.email } : {}),
+        },
+      },
+    ],
+    items: inv.lines.map((l) => ({
+      name: l.label,
+      quantity: "1",
+      unit_amount: { currency_code: currency, value: fromCents(toCents(l.amount)) },
+    })),
+    ...(minimum != null ? { allow_partial_payment: true, minimum_partial_payment_amount: fromCents(minimum) } : {}),
+  };
+}
+
+// An approved payment plan lowers the PayPal invoice's minimum payment to the first
+// instalment, so the family can pay as they go, and records the schedule.
+async function applyPaymentPlan(approvalItemId: string, payload: PaymentPlanPayload) {
+  const inv = await db.invoice.findUniqueOrThrow({
+    where: { id: payload.invoiceId },
+    include: { family: true, lines: true, event: { include: { school: true } } },
+  });
+  if (!inv.paypalInvoiceId) throw new Error("This invoice hasn't been sent through PayPal yet");
+  const first = toCents(payload.instalments[0].amount);
+  const schedule = payload.instalments
+    .map((i) => `${formatDate(new Date(`${i.dueOn}T00:00:00Z`))}: $${i.amount}`)
+    .join("; ");
+  const note = `${inv.event.title}. Payment plan agreed with the school: ${schedule}.`;
+
+  // update_invoicing replaces the invoice, so carry over PayPal's own number and date.
+  const live = await getInvoice(inv.paypalInvoiceId);
+  await gated(approvalItemId, "update_invoicing", {
+    resource_type: "invoice",
+    invoice_update: {
+      invoice_id: inv.paypalInvoiceId,
+      invoice_number: live.detail?.invoice_number,
+      invoice_date: live.detail?.invoice_date,
+      send_to_recipient: false,
+      ...invoiceFields(inv.event, inv, note, first),
+    },
+  });
+  await db.invoice.update({
+    where: { id: inv.id },
+    data: {
+      minimumPayment: fromCents(first),
+      plan: { frequency: payload.frequency, instalments: payload.instalments, agreedAt: new Date().toISOString() },
+    },
+  });
 }
 
 function invoiceNote(event: { title: string; feeItems: { depositAmount: Prisma.Decimal | null; depositDueOn: Date | null; dueOn: Date | null }[] }) {

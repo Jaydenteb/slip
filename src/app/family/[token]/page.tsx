@@ -7,6 +7,10 @@ import { formatDay, formatDayRange } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
 import { invoiceStatus } from "@/lib/status";
 import { Badge, Card, Logo, Skeleton } from "@/components/ui";
+import { toTurns } from "@/lib/agent/parent";
+import type Anthropic from "@anthropic-ai/sdk";
+import { Chat } from "./chat";
+import { ConsentTick } from "./consent";
 
 export const metadata = { title: "Your family", robots: { index: false } };
 
@@ -39,19 +43,25 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
       students: { include: { classroom: true }, orderBy: { firstName: "asc" } },
       invoices: {
         where: { status: { not: "PROPOSED" } },
-        include: { event: { include: { feeItems: true } }, lines: { include: { student: true } } },
+        include: {
+          event: { include: { feeItems: true, enrolments: { select: { studentId: true, consentGiven: true } } } },
+          lines: { include: { student: true } },
+        },
         orderBy: { createdAt: "desc" },
       },
+      chatThreads: { orderBy: { updatedAt: "desc" }, take: 1 },
     },
   });
   if (!family) notFound();
   // A parent coming back from paying should see it: catch up with PayPal in the background.
   after(() => syncOpenInvoices({ familyId: family.id, maxAgeMs: 30_000 }).catch(() => undefined));
   const currency = family.school.currency;
+  const firstName = family.contactName.split(" ")[0];
+  const turns = toTurns((family.chatThreads[0]?.messages ?? []) as unknown as Anthropic.Beta.Messages.BetaMessageParam[]);
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Hi {family.contactName.split(" ")[0]}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Hi {firstName}</h1>
       <p className="mt-1 text-ink-soft">
         {family.students.map((s) => `${s.firstName} (${s.classroom.name})`).join(" and ")} at {family.school.name}.
       </p>
@@ -110,11 +120,42 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
                     </a>
                   )}
                 </div>
+                {Array.isArray((inv.plan as { instalments?: unknown } | null)?.instalments) && (
+                  <div className="mt-4 rounded-lg border border-brand/20 bg-brand-tint/40 px-4 py-3 text-sm">
+                    <p className="font-medium text-brand-strong">Your payment plan</p>
+                    <ul className="mt-1 grid gap-0.5 text-ink-soft">
+                      {(inv.plan as { instalments: { dueOn: string; amount: string }[] }).instalments.map((p) => (
+                        <li key={p.dueOn} className="flex justify-between tabular-nums">
+                          <span>{formatDay(new Date(`${p.dueOn}T00:00:00Z`))}</span>
+                          <span>{formatMoney(toCents(p.amount), currency)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {inv.event.needsConsent && (
+                  <div className="mt-4 grid gap-2 rounded-lg bg-paper px-4 py-3">
+                    {inv.lines.map((l) => (
+                      <ConsentTick
+                        key={l.id}
+                        token={token}
+                        eventId={inv.eventId}
+                        studentId={l.studentId}
+                        name={l.student.firstName}
+                        given={inv.event.enrolments.find((e) => e.studentId === l.studentId)?.consentGiven ?? false}
+                      />
+                    ))}
+                  </div>
+                )}
               </Card>
             );
           })}
         </div>
       )}
+
+      <div className="mt-8">
+        <Chat token={token} initialTurns={turns} firstName={firstName} />
+      </div>
     </>
   );
 }

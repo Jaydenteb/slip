@@ -131,6 +131,8 @@ model Invoice {
   total            Decimal       @db.Decimal(10, 2)
   amountPaid       Decimal       @default(0) @db.Decimal(10, 2)
   minimumPayment   Decimal?      @db.Decimal(10, 2)
+  // An agreed payment plan: { instalments: [{ dueOn: "YYYY-MM-DD", amount: "71.25" }], agreedAt }
+  plan             Json?
   lastSyncedAt     DateTime?
   lines            InvoiceLine[]
   payments         Payment[]

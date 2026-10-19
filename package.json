@@ -15,7 +15,9 @@
     "spike": "tsx --env-file=.env scripts/spike.ts",
     "try-parse": "tsx --env-file=.env scripts/try-parse.ts",
     "e2e:office": "tsx --env-file=.env scripts/e2e-office.ts",
-    "sync": "tsx --env-file=.env scripts/sync.ts"
+    "sync": "tsx --env-file=.env scripts/sync.ts",
+    "try-chat": "tsx --env-file=.env scripts/try-chat.ts",
+    "approve": "tsx --env-file=.env scripts/approve.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

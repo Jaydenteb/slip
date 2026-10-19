@@ -13,6 +13,7 @@ export const PAYPAL_TOOLS = [
   "generate_invoice_qr_code",
   "record_payment_for_invoice",
   "record_refund_for_invoice",
+  "update_invoicing",
 ] as const;
 
 export type PayPalToolName = (typeof PAYPAL_TOOLS)[number];
@@ -43,6 +44,7 @@ function getToolkit() {
           generateQRC: true,
           recordPayment: true,
           recordRefund: true,
+          update: true,
         },
       },
       context: { sandbox: env.paypalSandbox() },
