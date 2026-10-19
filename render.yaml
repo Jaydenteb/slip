@@ -1,0 +1,42 @@
+# Render Blueprint: one web service and one Postgres database.
+# Paid plans on purpose: free web services sleep and free databases expire, and judges
+# need the demo up and quick until judging ends on 15 Dec 2026.
+databases:
+  - name: slip-db
+    plan: 0.1c-256mb
+    region: oregon
+    databaseName: slip
+    user: slip
+
+services:
+  - type: web
+    name: slip
+    runtime: node
+    plan: 0.5c-512mb
+    region: oregon
+    buildCommand: npm ci && npm run build
+    # Brings the schema up to date, and seeds the demo school only on first deploy.
+    preDeployCommand: npx prisma db push --skip-generate && npx tsx prisma/seed-if-empty.ts
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: slip-db
+          property: connectionString
+      - key: PAYPAL_ENVIRONMENT
+        value: SANDBOX
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SANDBOX_SCHOOL_EMAIL
+        sync: false
+      - key: SANDBOX_PARENT_EMAIL
+        sync: false
