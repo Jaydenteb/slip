@@ -8,7 +8,7 @@ import { validateConfirmedEvent } from "@/lib/events/validate";
 import { approveAndExecute, rejectApproval } from "@/lib/executor/run";
 import { syncOpenInvoices } from "@/lib/payments/sync";
 import { db } from "@/lib/db";
-import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { officeSchoolId } from "@/lib/demo/visitor";
 import { publicMessage } from "@/lib/errors";
 import { BUSY, isId, isIdList, overLimit } from "@/lib/guard";
 import { askLedger } from "@/lib/ledger/ask";
@@ -17,19 +17,19 @@ import { loadLedgerRows } from "@/lib/ledger/rows";
 import { proposeReminderBatch } from "@/lib/reminders/service";
 import { proposeWithdrawal } from "@/lib/withdrawals/service";
 
-// Demo build: there is no login, and the office is "the office". A real deployment
-// would check the signed-in staff member here before every action, and take the school
-// from their session rather than from a constant.
+// Demo build: there is no login, and the office is "the office". Each visitor has their
+// own copy of the school (from a cookie, see visitor.ts); every action works only in it.
+// A real deployment would take the school from the signed-in staff member instead.
 const OFFICE = "office";
-const SCHOOL = DEMO_SCHOOL_ID;
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
 
 const MAX_DESCRIPTION = 2000;
 const NOT_FOUND = { ok: false, error: "That isn't there any more. Refresh the page." } as const;
 
-// Every id from the browser is checked against this school before anything uses it.
-const eventInSchool = (id: unknown) => isId(id) && db.event.findFirst({ where: { id, schoolId: SCHOOL }, select: { id: true } });
+// Every id from the browser is checked against this visitor's school before anything uses it.
+const eventInSchool = async (id: unknown) =>
+  isId(id) && db.event.findFirst({ where: { id, schoolId: await officeSchoolId() }, select: { id: true } });
 
 function today() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" });
@@ -54,7 +54,7 @@ export async function saveEventAction(event: ParsedEvent, sourceText: string): P
   if (await overLimit("save-event", 10, 60)) return { ok: false, error: BUSY };
   let id: string;
   try {
-    id = (await saveEvent(checked.event)).id;
+    id = (await saveEvent(checked.event, await officeSchoolId())).id;
   } catch (err) {
     return { ok: false, error: publicMessage(err, "Couldn't save the event.") };
   }
@@ -88,7 +88,9 @@ export async function proposeRemindersAction(eventId: string): Promise<ActionRes
 
 export async function proposeWithdrawalAction(invoiceId: string, studentIds: string[], reason: string): Promise<ActionResult> {
   if (!isIdList(studentIds)) return { ok: false, error: "Choose who isn't going." };
-  const inv = isId(invoiceId) && (await db.invoice.findFirst({ where: { id: invoiceId, event: { schoolId: SCHOOL } }, select: { id: true } }));
+  const inv =
+    isId(invoiceId) &&
+    (await db.invoice.findFirst({ where: { id: invoiceId, event: { schoolId: await officeSchoolId() } }, select: { id: true } }));
   if (!inv) return NOT_FOUND;
   if (await overLimit("withdrawal", 20, 120)) return { ok: false, error: BUSY };
   let eventId: string;
@@ -111,7 +113,7 @@ export async function approveAction(approvalItemId: string): Promise<ActionResul
   if (!isId(approvalItemId)) return NOT_FOUND;
   if (await overLimit("decide", 60, 600)) return { ok: false, error: BUSY };
   try {
-    await approveAndExecute(approvalItemId, OFFICE, { schoolId: SCHOOL });
+    await approveAndExecute(approvalItemId, OFFICE, { schoolId: await officeSchoolId() });
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: publicMessage(err, "Something went wrong. The details are on the item.") };
@@ -124,7 +126,7 @@ export async function rejectAction(approvalItemId: string): Promise<ActionResult
   if (!isId(approvalItemId)) return NOT_FOUND;
   if (await overLimit("decide", 60, 600)) return { ok: false, error: BUSY };
   try {
-    await rejectApproval(approvalItemId, OFFICE, { schoolId: SCHOOL });
+    await rejectApproval(approvalItemId, OFFICE, { schoolId: await officeSchoolId() });
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: publicMessage(err, "Something went wrong.") };
@@ -152,11 +154,12 @@ export async function askLedgerAction(question: string): Promise<ActionResult<Le
   if (q.length > 300) return { ok: false, error: "Keep it under 300 characters." };
   if (await overLimit("ledger", 20, 200, { ai: true })) return { ok: false, error: BUSY };
   try {
-    const rows = await loadLedgerRows(SCHOOL);
+    const schoolId = await officeSchoolId();
+    const rows = await loadLedgerRows(schoolId);
     const query = await askLedger(q, rows, today());
     await db.agentAction.create({
       data: {
-        schoolId: SCHOOL,
+        schoolId,
         actor: "office-agent",
         action: "ledger.asked",
         input: { question: q },

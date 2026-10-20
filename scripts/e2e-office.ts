@@ -5,6 +5,7 @@ import { db } from "../src/lib/db";
 import { parseEventDescription } from "../src/lib/events/parse";
 import { proposeInvoiceBatch, saveEvent } from "../src/lib/events/service";
 import { approveAndExecute } from "../src/lib/executor/run";
+import { DEMO_SCHOOL_ID } from "../src/lib/demo/seed";
 
 const TEXT =
   "Year 4 camp at Bellbird Creek, 12–14 March, $285, $85 deposit by 1 December, balance by 1 February, needs consent.";
@@ -14,7 +15,7 @@ async function main() {
   const parsed = await parseEventDescription(TEXT, today);
   console.log("parsed:", parsed.title, parsed.fees);
 
-  const event = await saveEvent({ ...parsed, sourceText: TEXT });
+  const event = await saveEvent({ ...parsed, sourceText: TEXT }, DEMO_SCHOOL_ID);
   const enrolled = await db.enrolment.count({ where: { eventId: event.id } });
   console.log(`saved event ${event.id} with ${enrolled} students`);
 

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui";
 import { resetDemoAction } from "./actions";
 
-// Two steps, so nobody clears the shared demo by accident.
+// Two steps, so nobody clears their demo by accident. It only ever resets this visitor's own copy.
 export function ResetDemo() {
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function ResetDemo() {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <span className="text-sm text-ink-soft">
-        This clears every event, invoice, payment and chat, and starts Bellbird Primary again.
+        This clears every event, invoice, payment and chat in your copy, and starts Bellbird Primary again.
       </span>
       <Button
         variant="danger"

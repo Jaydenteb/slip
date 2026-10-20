@@ -1,6 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
-import { DEMO_FAMILY_TOKEN } from "@/lib/demo/seed";
 import { Logo } from "@/components/ui";
 import { ResetDemo } from "./reset-demo";
 
@@ -18,8 +16,9 @@ export default function Home() {
       </p>
 
       <div className="mt-12 grid animate-rise gap-4 [animation-delay:160ms] sm:grid-cols-2">
-        <Link
-          href="/office/events"
+        {/* Through /demo, which gives each visitor their own copy of the school. */}
+        <a
+          href="/demo?to=office"
           className="group rounded-2xl border border-line bg-surface p-6 transition-colors hover:border-brand"
         >
           <p className="text-sm font-medium text-brand">Try it as</p>
@@ -28,9 +27,9 @@ export default function Home() {
             Set up a camp in one sentence, approve the invoices, and watch payments arrive.
           </p>
           <p className="mt-6 text-sm font-medium text-ink group-hover:text-brand">Open the office →</p>
-        </Link>
-        <Link
-          href={`/family/${DEMO_FAMILY_TOKEN}`}
+        </a>
+        <a
+          href="/demo?to=parent"
           className="group rounded-2xl border border-line bg-surface p-6 transition-colors hover:border-brand"
         >
           <p className="text-sm font-medium text-brand">Try it as</p>
@@ -39,7 +38,7 @@ export default function Home() {
             The Nguyen family, with Ava in 4B and Leo in 4A. See what you owe, ask questions, and pay with PayPal.
           </p>
           <p className="mt-6 text-sm font-medium text-ink group-hover:text-brand">Open the family page →</p>
-        </Link>
+        </a>
       </div>
 
       <figure className="mt-14">
@@ -58,7 +57,8 @@ export default function Home() {
 
       <div className="mt-12 grid gap-4 border-t border-line pt-6">
         <p className="text-sm text-ink-faint">
-          A demo school with made-up families. Payments run in the PayPal sandbox; no real money moves.
+          A demo school with made-up families. You get your own copy, so nobody else sees or changes what you do. Payments
+          run in the PayPal sandbox; no real money moves.
         </p>
         <ResetDemo />
       </div>

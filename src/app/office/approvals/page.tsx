@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { clsx } from "clsx";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
-import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { officeSchoolId } from "@/lib/demo/visitor";
 import type { InvoiceBatchPayload } from "@/lib/executor/run";
 import type { ReminderBatchPayload } from "@/lib/reminders/service";
 import type { WithdrawalPayload } from "@/lib/withdrawals/service";
@@ -31,13 +31,14 @@ export default function ApprovalsPage() {
 
 async function Approvals() {
   await connection();
+  const schoolId = await officeSchoolId();
   const [open, decided] = await Promise.all([
     db.approvalItem.findMany({
-      where: { schoolId: DEMO_SCHOOL_ID, status: { in: ["PENDING", "EXECUTING", "FAILED"] } },
+      where: { schoolId: schoolId, status: { in: ["PENDING", "EXECUTING", "FAILED"] } },
       orderBy: { createdAt: "asc" },
     }),
     db.approvalItem.findMany({
-      where: { schoolId: DEMO_SCHOOL_ID, status: { in: ["EXECUTED", "REJECTED"] } },
+      where: { schoolId: schoolId, status: { in: ["EXECUTED", "REJECTED"] } },
       orderBy: { decidedAt: "desc" },
       take: 10,
     }),

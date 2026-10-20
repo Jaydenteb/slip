@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
-import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { officeSchoolId } from "@/lib/demo/visitor";
 import { formatDayRange } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Skeleton } from "@/components/ui";
@@ -34,8 +34,9 @@ const statusBadge: Record<EventStatus, { label: string; tone: "neutral" | "brand
 
 async function EventList() {
   await connection();
+  const schoolId = await officeSchoolId();
   const events = await db.event.findMany({
-    where: { schoolId: DEMO_SCHOOL_ID },
+    where: { schoolId: schoolId },
     orderBy: { createdAt: "desc" },
     include: {
       school: { select: { currency: true } },

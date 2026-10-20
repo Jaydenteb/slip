@@ -8,15 +8,17 @@ datasource db {
 }
 
 model School {
-  id          String      @id @default(cuid())
-  name        String
-  email       String
-  currency    String      @default("AUD")
-  countryCode String      @default("AU")
-  classrooms  Classroom[]
-  families    Family[]
-  events      Event[]
-  createdAt   DateTime    @default(now())
+  id           String      @id @default(cuid())
+  name         String
+  email        String
+  currency     String      @default("AUD")
+  countryCode  String      @default("AU")
+  classrooms   Classroom[]
+  families     Family[]
+  events       Event[]
+  createdAt    DateTime    @default(now())
+  // Demo copies untouched for a month are cleared away (see src/lib/demo/visitor.ts).
+  lastActiveAt DateTime    @default(now())
 }
 
 model Classroom {
@@ -43,11 +45,11 @@ model Family {
 }
 
 model Student {
-  id          String       @id @default(cuid())
+  id          String        @id @default(cuid())
   familyId    String
-  family      Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  family      Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
   classroomId String
-  classroom   Classroom    @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  classroom   Classroom     @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   firstName   String
   lastName    String
   enrolments  Enrolment[]
@@ -62,48 +64,48 @@ enum EventStatus {
 }
 
 model Event {
-  id             String      @id @default(cuid())
-  schoolId       String
-  school         School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  title          String
-  description    String
-  location       String?
-  startsOn       DateTime?
-  endsOn         DateTime?
+  id           String      @id @default(cuid())
+  schoolId     String
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  location     String?
+  startsOn     DateTime?
+  endsOn       DateTime?
   // The office's original plain-English description, kept for the parent agent's context.
-  sourceText     String
-  status         EventStatus @default(DRAFT)
-  needsConsent   Boolean     @default(true)
+  sourceText   String
+  status       EventStatus @default(DRAFT)
+  needsConsent Boolean     @default(true)
   // Classes this event applies to.
-  classroomIds   String[]
-  feeItems       FeeItem[]
-  enrolments     Enrolment[]
-  invoices       Invoice[]
-  createdAt      DateTime    @default(now())
+  classroomIds String[]
+  feeItems     FeeItem[]
+  enrolments   Enrolment[]
+  invoices     Invoice[]
+  createdAt    DateTime    @default(now())
 }
 
 model FeeItem {
-  id        String   @id @default(cuid())
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  label     String // "Camp fee"
-  amount    Decimal  @db.Decimal(10, 2)
+  id            String    @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  label         String // "Camp fee"
+  amount        Decimal   @db.Decimal(10, 2)
   // Minimum first payment (the deposit), if partial payments are allowed.
-  depositAmount Decimal? @db.Decimal(10, 2)
+  depositAmount Decimal?  @db.Decimal(10, 2)
   depositDueOn  DateTime?
-  dueOn     DateTime?
+  dueOn         DateTime?
 }
 
 // A student on an event: consent and attendance live here, never medical details.
 model Enrolment {
-  id            String    @id @default(cuid())
-  eventId       String
-  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  studentId     String
-  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  consentGiven  Boolean   @default(false)
-  formReturned  Boolean   @default(false)
-  attending     Boolean   @default(true)
+  id           String  @id @default(cuid())
+  eventId      String
+  event        Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  consentGiven Boolean @default(false)
+  formReturned Boolean @default(false)
+  attending    Boolean @default(true)
 
   @@unique([eventId, studentId])
 }
@@ -120,26 +122,26 @@ enum InvoiceStatus {
 
 // One invoice per family per event: siblings are combined into lines.
 model Invoice {
-  id               String        @id @default(cuid())
-  eventId          String
-  event            Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  familyId         String
-  family           Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  paypalInvoiceId  String?       @unique
-  paypalPayerUrl   String?
-  status           InvoiceStatus @default(PROPOSED)
-  total            Decimal       @db.Decimal(10, 2)
+  id              String        @id @default(cuid())
+  eventId         String
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  familyId        String
+  family          Family        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  paypalInvoiceId String?       @unique
+  paypalPayerUrl  String?
+  status          InvoiceStatus @default(PROPOSED)
+  total           Decimal       @db.Decimal(10, 2)
   // Net of refunds, so owing is always total - amountPaid. PayPal reports paid and refunded separately.
-  amountPaid       Decimal       @default(0) @db.Decimal(10, 2)
-  amountRefunded   Decimal       @default(0) @db.Decimal(10, 2)
-  minimumPayment   Decimal?      @db.Decimal(10, 2)
+  amountPaid      Decimal       @default(0) @db.Decimal(10, 2)
+  amountRefunded  Decimal       @default(0) @db.Decimal(10, 2)
+  minimumPayment  Decimal?      @db.Decimal(10, 2)
   // An agreed payment plan: { instalments: [{ dueOn: "YYYY-MM-DD", amount: "71.25" }], agreedAt }
-  plan             Json?
-  lastSyncedAt     DateTime?
-  lines            InvoiceLine[]
-  payments         Payment[]
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  plan            Json?
+  lastSyncedAt    DateTime?
+  lines           InvoiceLine[]
+  payments        Payment[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@unique([eventId, familyId])
 }
@@ -195,23 +197,23 @@ enum ApprovalStatus {
 
 // Everything that reaches parents or moves money waits here for a person.
 model ApprovalItem {
-  id          String         @id @default(cuid())
-  schoolId    String
-  kind        ApprovalKind
-  status      ApprovalStatus @default(PENDING)
-  title       String
+  id         String         @id @default(cuid())
+  schoolId   String
+  kind       ApprovalKind
+  status     ApprovalStatus @default(PENDING)
+  title      String
   // Plain-English summary written by the agent for the person approving.
-  summary     String
+  summary    String
   // The exact actions the executor will run on approval (validated before execution).
-  payload     Json
-  proposedBy  String // "office-agent" | "parent-agent" | "office"
-  familyId    String?
-  eventId     String?
-  decidedBy   String?
-  decidedAt   DateTime?
-  error       String?
-  actions     AgentAction[]
-  createdAt   DateTime       @default(now())
+  payload    Json
+  proposedBy String // "office-agent" | "parent-agent" | "office"
+  familyId   String?
+  eventId    String?
+  decidedBy  String?
+  decidedAt  DateTime?
+  error      String?
+  actions    AgentAction[]
+  createdAt  DateTime       @default(now())
 }
 
 // Audit log: every PayPal call, every proposal, every decision.

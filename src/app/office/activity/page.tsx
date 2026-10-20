@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
-import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { officeSchoolId } from "@/lib/demo/visitor";
 import { formatMoment } from "@/lib/format";
 import { Badge, Card, EmptyState, PageHeader, Skeleton } from "@/components/ui";
 
@@ -100,8 +100,9 @@ function collapse(
 
 async function ActivityLog() {
   await connection();
+  const schoolId = await officeSchoolId();
   const actions = await db.agentAction.findMany({
-    where: { schoolId: DEMO_SCHOOL_ID },
+    where: { schoolId: schoolId },
     orderBy: { createdAt: "desc" },
     take: 200,
     include: { approvalItem: { select: { title: true } } },

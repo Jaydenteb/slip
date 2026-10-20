@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { officeSchoolId } from "@/lib/demo/visitor";
 import { loadLedgerRows } from "@/lib/ledger/rows";
 import { PageHeader, Skeleton } from "@/components/ui";
 import { LedgerGrid } from "./ledger-grid";
@@ -23,5 +23,6 @@ export default function LedgerPage() {
 
 async function Ledger() {
   await connection();
-  return <LedgerGrid initialRows={await loadLedgerRows(DEMO_SCHOOL_ID)} />;
+  const schoolId = await officeSchoolId();
+  return <LedgerGrid initialRows={await loadLedgerRows(schoolId)} />;
 }

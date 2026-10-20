@@ -1,5 +1,4 @@
 import { db } from "../db";
-import { DEMO_SCHOOL_ID } from "../demo/seed";
 import { buildInvoiceDrafts } from "../invoicing/build";
 import { formatMoney, fromCents, toCents } from "../money";
 import type { ParsedEvent } from "./parse";
@@ -8,8 +7,8 @@ import { UserError } from "../errors";
 // The event the office confirmed on the review screen (the parsed event, possibly edited).
 export type ConfirmedEvent = ParsedEvent & { sourceText: string };
 
-export async function saveEvent(input: ConfirmedEvent) {
-  const classrooms = await db.classroom.findMany({ where: { schoolId: DEMO_SCHOOL_ID } });
+export async function saveEvent(input: ConfirmedEvent, schoolId: string) {
+  const classrooms = await db.classroom.findMany({ where: { schoolId } });
   const invited = classrooms.filter((c) =>
     input.classNames.length
       ? input.classNames.some((n) => n.toUpperCase() === c.name.toUpperCase())
@@ -22,7 +21,7 @@ export async function saveEvent(input: ConfirmedEvent) {
 
   return db.event.create({
     data: {
-      schoolId: DEMO_SCHOOL_ID,
+      schoolId,
       title: input.title,
       description: input.summary,
       location: input.location,

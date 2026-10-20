@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { after, connection } from "next/server";
 import { db } from "@/lib/db";
-import { DEMO_SCHOOL_ID } from "@/lib/demo/seed";
+import { officeSchoolId, visitorSchoolId } from "@/lib/demo/visitor";
 import { formatDay, formatDayRange } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
 import { invoiceStatus } from "@/lib/status";
@@ -16,7 +16,8 @@ import { syncOpenInvoices } from "@/lib/payments/sync";
 
 export async function generateMetadata({ params }: PageProps<"/office/events/[id]">) {
   const { id } = await params;
-  const event = await db.event.findFirst({ where: { id, schoolId: DEMO_SCHOOL_ID }, select: { title: true } });
+  const schoolId = await visitorSchoolId();
+  const event = schoolId ? await db.event.findFirst({ where: { id, schoolId }, select: { title: true } }) : null;
   return { title: event?.title ?? "Event" };
 }
 
@@ -30,9 +31,10 @@ export default function EventPage({ params }: PageProps<"/office/events/[id]">) 
 
 async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
   await connection();
+  const schoolId = await officeSchoolId();
   const { id } = await params;
   const event = await db.event.findFirst({
-    where: { id, schoolId: DEMO_SCHOOL_ID },
+    where: { id, schoolId },
     include: {
       school: true,
       feeItems: true,

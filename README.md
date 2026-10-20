@@ -18,7 +18,7 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
 
 ## Try it in five minutes
 
-1. **Start fresh.** On the [landing page](https://slip-48nu.onrender.com), click **Reset the demo**. Bellbird Primary comes back with 60 families, 86 students and no events.
+1. **Open your own copy.** On the [landing page](https://slip-48nu.onrender.com), choose **The school office**. Every visitor gets a private copy of Bellbird Primary: 60 families, 86 students and no events. Nobody else sees or changes what you do. **Reset the demo** starts your copy again.
 2. **Set up a camp as the office.** Open **The school office**, go to **Events → New event**, and paste:
    > Year 4 camp at Bellbird Creek Camp, 12–14 March. $285 per student, $85 deposit by 1 December, balance by 1 February. Needs a consent form.
 
@@ -106,8 +106,8 @@ The demo itself uses a made-up school and made-up families, and payments run in 
 
 ### Who can reach what
 
-- **A parent** has a private link to their family page, with a 96-bit random token. Everything on the page, and every tool in its chat, loads that family from the token and filters by it. (The demo's Nguyen link is fixed so judges can open it from the home page. Every other family's link is random.)
-- **The office** has no sign-in in this demo, so anyone can open it. A real deployment adds staff sign-in (see below). Even so, every office action checks that the ids it's given belong to the school, and nothing reaches a family or moves money without an approval.
+- **A parent** has a private link to their family page, with a 96-bit random token. Everything on the page, and every tool in its chat, loads that family from the token and filters by it.
+- **The office** has no sign-in in this demo. Instead, each visitor gets their own copy of the school. The copy's id is kept in an http-only cookie and acts as that visitor's key ([src/lib/demo/visitor.ts](src/lib/demo/visitor.ts)). Every office page and action resolves the school from it, and checks that each id it's given belongs to that school. So each visitor is a separate tenant, and the cross-school checks are exercised for real. Making copies is rate-limited, and copies nobody has opened for a month are deleted. A real deployment takes the school from staff sign-in instead (see below). Either way, nothing reaches a family or moves money without an approval.
 - **Claude** sees text that people typed: a parent's messages, and the office's event descriptions. All of it is treated as data, and Claude never holds a tool that can reach PayPal.
 - **PayPal webhooks** can be sent by anyone. Each one is verified with PayPal before Slip acts on it.
 
@@ -150,6 +150,7 @@ Slip scopes every query to the family or school in application code, and databas
 - **Staff sign-in** through the school's single sign-on, with roles, and a second approver for refunds above a set amount.
 - **Postgres row-level security** for each school, on top of the checks in the app.
 - **Shared rate limits** (Redis, for example) instead of in-memory ones, so the limits hold across several servers.
+- **The school from sign-in, not a cookie:** the demo's per-visitor copies stand in for real accounts.
 - **Expiring family links** that the office can re-issue, or sign-in by the family's email.
 - **Retention rules:** chat threads are deleted once an event closes.
 - **A nonce-based Content Security Policy,** so no inline scripts are needed.
@@ -158,6 +159,7 @@ Slip scopes every query to the family or school in application code, and databas
 
 - [src/lib/executor/gate.test.ts](src/lib/executor/gate.test.ts): the gate refuses without an approved, executing item or with a tool that isn't allowed, and a call that succeeded is never recorded as failed.
 - [tests/db/parent-scope.test.ts](tests/db/parent-scope.test.ts): one family's chat can't see or act on another family's invoices or children.
+- [tests/db/demo-copies.test.ts](tests/db/demo-copies.test.ts): each visitor's copy has its own families and family links, and resetting one leaves the others alone.
 - [tests/db/office-safety.test.ts](tests/db/office-safety.test.ts):
   - a withdrawal only names children on that family's invoice;
   - two withdrawals drafted at once produce only one;

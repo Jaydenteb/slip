@@ -62,10 +62,11 @@ export async function syncInvoice(invoiceId: string, actor: "sync" | "webhook" =
 }
 
 // Syncs every open invoice (optionally for one event or family) not synced in the last `maxAgeMs`.
-export async function syncOpenInvoices(opts: { eventId?: string; familyId?: string; maxAgeMs?: number } = {}) {
+export async function syncOpenInvoices(opts: { schoolId?: string; eventId?: string; familyId?: string; maxAgeMs?: number } = {}) {
   const cutoff = new Date(Date.now() - (opts.maxAgeMs ?? 0));
   const invoices = await db.invoice.findMany({
     where: {
+      ...(opts.schoolId ? { event: { schoolId: opts.schoolId } } : {}),
       ...(opts.eventId ? { eventId: opts.eventId } : {}),
       ...(opts.familyId ? { familyId: opts.familyId } : {}),
       paypalInvoiceId: { not: null },

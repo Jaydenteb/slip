@@ -75,7 +75,7 @@ The most useful thing an AI can do here is the admin around the payment, not the
 
 ## Try it
 
-- **Live demo:** https://slip-48nu.onrender.com (a made-up school; PayPal sandbox, so no real money moves). Use **Reset the demo** for a fresh start.
+- **Live demo:** https://slip-48nu.onrender.com (a made-up school; PayPal sandbox, so no real money moves). Every visitor gets their own private copy of the school, so judges never see each other's runs. **Reset the demo** starts your copy again.
 - **Sandbox buyer for paying invoices:** see the README.
 - **Code:** https://github.com/Jaydenteb/slip (MIT)
 - **Video:** _(YouTube link)_

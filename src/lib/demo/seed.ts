@@ -1,12 +1,14 @@
-import { randomBytes } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import { randomBytes, randomUUID } from "node:crypto";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 // Fake "Bellbird Primary" for the demo and for judges. Generated from a fixed seed,
 // so every reset produces the same school. No real people, no real school.
 
+// The shared school: used by the local scripts, and for visitors when making them their
+// own copy is rate-limited. Every other visitor gets a private copy (see visitor.ts).
 export const DEMO_SCHOOL_ID = "bellbird";
-// The family judges use for "View as parent". Billed to the sandbox personal account,
-// so judges can log in and actually pay.
+// The family judges use for "View as parent" in the shared school. Billed to the sandbox
+// personal account, so judges can log in and actually pay. Copies get a random token.
 export const DEMO_FAMILY_TOKEN = "nguyen-family";
 
 const CLASSES = ["3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
@@ -54,7 +56,7 @@ export type DemoFamily = {
   kids: { firstName: string; className: string }[];
 };
 
-export function generateFamilies(parentEmail: string): DemoFamily[] {
+export function generateFamilies(parentEmail: string, nguyenToken = DEMO_FAMILY_TOKEN): DemoFamily[] {
   const random = rng(20261113);
   const pick = <T,>(list: T[]) => list[Math.floor(random() * list.length)];
 
@@ -66,7 +68,7 @@ export function generateFamilies(parentEmail: string): DemoFamily[] {
         familyName: surname,
         contactName: `${contact} ${surname}`,
         email: parentEmail,
-        linkToken: DEMO_FAMILY_TOKEN,
+        linkToken: nguyenToken,
         kids: [
           { firstName: "Ava", className: "4B" },
           { firstName: "Leo", className: "4A" },
@@ -91,45 +93,52 @@ export function generateFamilies(parentEmail: string): DemoFamily[] {
   });
 }
 
-// Wipes the demo school (everything cascades from it) and builds it again.
+// Removes a demo school and everything in it. Most rows cascade from the school; the
+// audit log, approvals and chats are cleared first.
+export async function wipeDemoSchool(tx: Prisma.TransactionClient, schoolId: string) {
+  await tx.agentAction.deleteMany({ where: { schoolId } });
+  await tx.approvalItem.deleteMany({ where: { schoolId } });
+  await tx.chatThread.deleteMany({ where: { family: { schoolId } } });
+  await tx.school.deleteMany({ where: { id: schoolId } });
+}
+
+// Wipes a demo school and builds it again: 8 classes, 60 families, 86 students, no events.
 // PayPal sandbox invoices from earlier runs stay in the sandbox; Slip just forgets them.
-export async function resetDemoSchool(db: PrismaClient, opts: { schoolEmail: string; parentEmail: string }) {
-  await db.$transaction(async (tx) => {
-    await tx.agentAction.deleteMany({ where: { schoolId: DEMO_SCHOOL_ID } });
-    await tx.approvalItem.deleteMany({ where: { schoolId: DEMO_SCHOOL_ID } });
-    await tx.chatThread.deleteMany({ where: { family: { schoolId: DEMO_SCHOOL_ID } } });
-    await tx.chatThread.deleteMany({ where: { familyId: null } });
-    await tx.school.deleteMany({ where: { id: DEMO_SCHOOL_ID } });
+export async function resetDemoSchool(
+  db: PrismaClient,
+  opts: { schoolId?: string; schoolEmail: string; parentEmail: string },
+): Promise<{ schoolId: string; nguyenToken: string }> {
+  const schoolId = opts.schoolId ?? DEMO_SCHOOL_ID;
+  const nguyenToken = schoolId === DEMO_SCHOOL_ID ? DEMO_FAMILY_TOKEN : randomBytes(12).toString("base64url");
+  const families = generateFamilies(opts.parentEmail, nguyenToken);
+  const classIds = new Map(CLASSES.map((name) => [name, randomUUID()]));
+  const familyIds = families.map(() => randomUUID());
 
-    await tx.school.create({
-      data: { id: DEMO_SCHOOL_ID, name: "Bellbird Primary School", email: opts.schoolEmail },
-    });
-
-    const classIds = new Map<string, string>();
-    for (const name of CLASSES) {
-      const c = await tx.classroom.create({
-        data: { schoolId: DEMO_SCHOOL_ID, name, year: Number(name[0]) },
+  // A handful of bulk inserts, so a visitor's own copy is ready in a moment.
+  await db.$transaction(
+    async (tx) => {
+      await wipeDemoSchool(tx, schoolId);
+      await tx.school.create({ data: { id: schoolId, name: "Bellbird Primary School", email: opts.schoolEmail } });
+      await tx.classroom.createMany({
+        data: CLASSES.map((name) => ({ id: classIds.get(name)!, schoolId, name, year: Number(name[0]) })),
       });
-      classIds.set(name, c.id);
-    }
-
-    for (const fam of generateFamilies(opts.parentEmail)) {
-      await tx.family.create({
-        data: {
-          schoolId: DEMO_SCHOOL_ID,
-          familyName: fam.familyName,
-          contactName: fam.contactName,
-          email: fam.email,
-          linkToken: fam.linkToken,
-          students: {
-            create: fam.kids.map((k) => ({
-              firstName: k.firstName,
-              lastName: fam.familyName,
-              classroomId: classIds.get(k.className)!,
-            })),
-          },
-        },
+      await tx.family.createMany({
+        data: families.map((f, i) => ({
+          id: familyIds[i],
+          schoolId,
+          familyName: f.familyName,
+          contactName: f.contactName,
+          email: f.email,
+          linkToken: f.linkToken,
+        })),
       });
-    }
-  }, { timeout: 60_000 });
+      await tx.student.createMany({
+        data: families.flatMap((f, i) =>
+          f.kids.map((k) => ({ familyId: familyIds[i], firstName: k.firstName, lastName: f.familyName, classroomId: classIds.get(k.className)! })),
+        ),
+      });
+    },
+    { timeout: 60_000 },
+  );
+  return { schoolId, nguyenToken };
 }
