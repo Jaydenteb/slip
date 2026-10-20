@@ -5,6 +5,7 @@ import { syncOpenInvoices } from "@/lib/payments/sync";
 import { db } from "@/lib/db";
 import { formatDay, formatDayRange } from "@/lib/format";
 import { formatMoney, toCents } from "@/lib/money";
+import { paidTowardsPlan } from "@/lib/invoicing/plan";
 import { invoiceStatus } from "@/lib/status";
 import { Badge, Card, Logo, Skeleton } from "@/components/ui";
 import { toTurns } from "@/lib/agent/parent";
@@ -77,7 +78,7 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
             const owing = total - paid;
             const fee = inv.event.feeItems[0];
             const plan = (inv.plan as { instalments?: { dueOn: string; amount: string }[] } | null)?.instalments ?? null;
-            const next = plan ? nextInstalment(plan, paid) : null;
+            const next = plan ? nextInstalment(plan, paidTowardsPlan(plan.map((p) => toCents(p.amount)), total, paid)) : null;
             const s = invoiceStatus[inv.status];
             // Everyone withdrawn: nothing to pay, just say what happened to the money.
             if (inv.lines.length === 0) {
@@ -193,6 +194,7 @@ async function Family({ params }: { params: Promise<{ token: string }> }) {
 }
 
 // The first instalment not yet covered by what's been paid, with what's left of it.
+// paidCents is what's been paid since the plan was agreed (see paidTowardsPlan).
 function nextInstalment(plan: { dueOn: string; amount: string }[], paidCents: number) {
   let covered = paidCents;
   for (const p of plan) {

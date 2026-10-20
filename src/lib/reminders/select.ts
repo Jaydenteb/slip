@@ -1,4 +1,5 @@
 import type { Cents } from "../money";
+import { paidTowardsPlan } from "../invoicing/plan";
 
 // Who gets a payment reminder, and how firm it is. Plain rules, not the model: the
 // model only writes the wording, and a person approves the batch before anything is sent.
@@ -54,7 +55,9 @@ export function chooseReminders(candidates: ReminderCandidate[], event: EventDat
       continue;
     }
 
-    const pick = c.plan ? onPlan(c.plan, c.paid, today) : onDeadlines(c, event, today);
+    const pick = c.plan
+      ? onPlan(c.plan, paidTowardsPlan(c.plan.map((p) => p.amount), c.total, c.paid), today)
+      : onDeadlines(c, event, today);
     if (!pick) {
       skipped.push({ familyName: c.familyName, reason: c.plan ? "Up to date with their payment plan" : "Nothing due yet" });
       continue;

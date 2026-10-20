@@ -93,18 +93,23 @@ export function toGridState(q: LedgerQuery, opts: { canGroup: boolean }): GridSt
     if (!sorts.some((s) => s.column === q.groupBy)) sorts.unshift({ column: q.groupBy, direction: "asc" });
   }
 
-  const shown = q.columns ? new Set<LedgerColumn>(["student", ...q.columns]) : null;
-  if (shown && q.groupBy) shown.add(q.groupBy);
-  for (const s of sorts) shown?.add(s.column);
-  for (const f of Object.keys(filterModel)) shown?.add(f as LedgerColumn);
+  // Visibility is always set, so columns hidden by an earlier question come back. With no
+  // columns chosen, everything shows except Year (which Class already implies).
+  const shown = new Set<LedgerColumn>(q.columns ? ["student", ...q.columns] : LEDGER_COLUMN_IDS.filter((c) => c !== "year"));
+  if (q.groupBy) shown.add(q.groupBy);
+  for (const s of sorts) shown.add(s.column);
+  for (const f of Object.keys(filterModel)) shown.add(f as LedgerColumn);
 
-  const columnState = LEDGER_COLUMN_IDS.map((colId) => {
+  // Column order: Student, then the columns in the order Claude chose them (what was
+  // sorted on first), then the rest.
+  const order = [...new Set<LedgerColumn>(["student", ...sorts.map((s) => s.column), ...(q.columns ?? []), ...LEDGER_COLUMN_IDS])];
+  const columnState = order.map((colId) => {
     const sortIndex = sorts.findIndex((s) => s.column === colId);
     return {
       colId,
       sort: sortIndex >= 0 ? sorts[sortIndex].direction : null,
       sortIndex: sortIndex >= 0 ? sortIndex : null,
-      ...(shown ? { hide: !shown.has(colId) } : {}),
+      hide: !shown.has(colId),
       ...(opts.canGroup ? { rowGroup: q.groupBy === colId } : {}),
     };
   });

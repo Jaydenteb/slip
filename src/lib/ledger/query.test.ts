@@ -115,3 +115,13 @@ test("the schema rejects columns that don't exist", () => {
   const bad = LedgerQuerySchema.safeParse({ ...base, sort: [{ column: "password", direction: "asc" }] });
   assert.equal(bad.success, false);
 });
+
+test("columns come back after a question that hid them, and sorted columns come first", () => {
+  const state = toGridState({ ...base, columns: null, sort: [{ column: "owing", direction: "desc" }] }, { canGroup: false });
+  assert.deepEqual(
+    state.columnState.slice(0, 2).map((c) => c.colId),
+    ["student", "owing"],
+  );
+  const hidden = state.columnState.filter((c) => c.hide).map((c) => c.colId);
+  assert.deepEqual(hidden, ["year"]);
+});

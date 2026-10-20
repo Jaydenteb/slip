@@ -15,8 +15,15 @@ export default function OfficeLayout({ children }: LayoutProps<"/office">) {
             <Logo />
           </Link>
           <span className="hidden text-sm text-ink-faint sm:inline">Bellbird Primary · School office</span>
+          {/* On a phone the parent view sits beside the logo, so the tabs below have room. */}
+          <Link
+            href={`/family/${DEMO_FAMILY_TOKEN}`}
+            className="ml-auto rounded-lg border border-line px-3 py-1.5 text-sm text-ink-soft hover:border-ink-faint hover:text-ink sm:hidden"
+          >
+            View as parent
+          </Link>
           {/* On a phone the nav gets its own row and scrolls sideways. */}
-          <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-3 py-2 text-sm whitespace-nowrap sm:mx-0 sm:ml-auto sm:w-auto sm:px-0 sm:py-0">
+          <nav className="-mx-4 flex w-full items-center gap-0.5 overflow-x-auto px-3 py-2 text-sm whitespace-nowrap sm:mx-0 sm:ml-auto sm:w-auto sm:px-0 sm:py-0">
             <NavLink href="/office/ledger">Ledger</NavLink>
             <NavLink href="/office/events">Events</NavLink>
             <NavLink href="/office/approvals">
@@ -28,10 +35,9 @@ export default function OfficeLayout({ children }: LayoutProps<"/office">) {
             <NavLink href="/office/activity">Activity</NavLink>
             <Link
               href={`/family/${DEMO_FAMILY_TOKEN}`}
-              className="ml-auto rounded-lg border border-line px-3 py-1.5 text-ink-soft hover:border-ink-faint hover:text-ink sm:ml-2"
+              className="ml-2 hidden rounded-lg border border-line px-3 py-1.5 text-ink-soft hover:border-ink-faint hover:text-ink sm:inline-flex"
             >
-              <span className="sm:hidden">Parent</span>
-              <span className="hidden sm:inline">View as parent</span>
+              View as parent
             </Link>
           </nav>
         </div>

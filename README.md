@@ -26,20 +26,20 @@ Built for the PayPal "Build what's next with PayPal and AI" hackathon. MIT licen
 3. **Approve the invoices.** On the event page, click **Draft invoices for 18 families**, then open **Approvals**. The batch shows every family's invoice. Siblings are combined: the Nguyens' invoice covers Ava (4B) and Leo (4A), $570 with a $170 minimum. Click **Approve & send**. Slip creates and sends the PayPal invoices, and **Activity** shows each PayPal call.
 4. **Be a parent.** Click **View as parent** to open the Nguyen family page. Ask Slip:
    - "How much do I owe and when?"
-   - "Can I pay the rest weekly?" Slip proposes a plan. It doesn't decide it.
-   - "Leo can't come to camp any more." Slip works out what changes (here the invoice drops to $285 for Ava; anything already paid beyond that would be refunded) and asks the office to approve the withdrawal. It keeps the reason neutral and never records medical details.
+   - "Leo can't come to camp any more." Slip works out what changes and asks the office to approve the withdrawal. Here, the invoice drops to $285 for Ava; anything already paid beyond that would be refunded. Slip keeps the reason neutral and never records medical details.
    - "Money's tight at the moment." Slip mentions the state's camps fund (CSEF) and privately flags the family to the office. It never decides anything about hardship itself.
-5. **Approve the plan.** Back in **Approvals**, approve the payment plan. Slip updates the PayPal invoice so the minimum payment becomes the first instalment.
+5. **Approve the withdrawal.** Back in **Approvals**, the withdrawal lists exactly what will happen, step by step. Click **Approve withdrawal**. Slip cuts the PayPal invoice down to Ava's $285, with an $85 minimum. Approve this *before* the family pays: Slip deliberately stops a withdrawal if payments changed after the office reviewed it.
 6. **Pay.** On the family page, click **Pay with PayPal** and pay the $85 deposit with the sandbox buyer:
    - email: `sb-f47efm53424610@personal.example.com`
    - password: `M'=4i+=f`
 
    This is a PayPal sandbox test account, not a real one.
-7. **Chase the rest, kindly.** Back on the event page, click **Draft reminders**. Slip picks who to remind and how firmly, and leaves out anyone who asked for support or was reminded in the last week. It drafts the wording, and the office reads it in **Approvals** before PayPal sends anything.
-8. **Watch the ledger.** Open **Ledger**. The PayPal webhook updates the row and the changed cells flash. Then try **Ask the ledger**:
+7. **Ask for a payment plan.** Ask Slip "Can I pay the rest in 4 weekly payments?". Slip asks the office to approve 4 payments of $50 for the $200 left. Approve it in **Approvals**. Slip updates the PayPal invoice so the minimum payment becomes the first instalment, and the family page shows the schedule.
+8. **Chase the rest, kindly.** Back on the event page, click **Draft reminders**. Slip picks who to remind and how firmly. It leaves out anyone who asked for support (the Nguyens) or was reminded in the last week. It drafts the wording, and the office reads it in **Approvals** before PayPal sends anything.
+9. **Watch the ledger.** Open **Ledger**. The PayPal webhook updates the Nguyens' row and the changed cells flash. Then try **Ask the ledger**:
    - "Who in 4B hasn't paid the camp deposit yet?"
    - "Who owes more than $200?"
-   - "Group by class with totals"
+   - "Group by class with totals" (when AG Grid Enterprise is enabled)
 
    Slip answers with AG Grid's own filter, sort, column and grouping state, and the grid applies it. The chip above the grid explains what it did.
 

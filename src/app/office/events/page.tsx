@@ -39,7 +39,7 @@ async function EventList() {
     orderBy: { createdAt: "desc" },
     include: {
       school: { select: { currency: true } },
-      _count: { select: { enrolments: true } },
+      _count: { select: { enrolments: { where: { attending: true } } } },
       invoices: { select: { total: true, amountPaid: true, status: true } },
     },
   });
@@ -65,7 +65,7 @@ async function EventList() {
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{e.title}</p>
                 <p className="text-sm text-ink-soft">
-                  {formatDayRange(e.startsOn, e.endsOn)} · {e._count.enrolments} students
+                  {formatDayRange(e.startsOn, e.endsOn)} · {e._count.enrolments} going
                 </p>
               </div>
               {billed > 0 && (

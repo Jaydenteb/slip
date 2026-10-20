@@ -56,7 +56,12 @@ export function Chat({ token, initialTurns, firstName }: { token: string; initia
         {turns.length > 0 && (
           <button
             type="button"
-            onClick={() => start(async () => { await newChatAction(token); setTurns([]); })}
+            onClick={() =>
+              start(async () => {
+                await newChatAction(token);
+                setTurns([]);
+              })
+            }
             className="shrink-0 text-xs text-ink-soft hover:text-ink"
           >
             New chat
@@ -64,15 +69,27 @@ export function Chat({ token, initialTurns, firstName }: { token: string; initia
         )}
       </div>
 
-      <div ref={listRef} className="grid max-h-[28rem] min-h-40 content-start gap-3 overflow-y-auto px-5 py-4" aria-live="polite">
+      <div
+        ref={listRef}
+        className="grid max-h-[28rem] min-h-40 content-start gap-3 overflow-y-auto px-5 py-4"
+        role="log"
+        aria-label="Conversation with Slip"
+        aria-live="polite"
+        tabIndex={0}
+      >
         {turns.length === 0 && (
-          <p className="text-sm text-ink-soft">Hi {firstName}! Ask anything about what&rsquo;s owed, due dates or paying in instalments.</p>
+          <p className="text-sm text-ink-soft">
+            Hi {firstName}! Ask anything about what&rsquo;s owed, due dates or paying in instalments.
+          </p>
         )}
         {turns.map((t, i) =>
           t.from === "parent" ? (
             <div
               key={i}
-              className={clsx("ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-brand px-4 py-2.5 text-sm text-white", i >= seen && "animate-rise")}
+              className={clsx(
+                "ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-brand px-4 py-2.5 text-sm text-white",
+                i >= seen && "animate-rise",
+              )}
             >
               {t.text}
             </div>
@@ -84,9 +101,19 @@ export function Chat({ token, initialTurns, firstName }: { token: string; initia
                 ))}
               </div>
               {t.actions.map((a) => (
-                <p key={a} className="mt-1.5 mr-1.5 inline-flex items-center gap-1.5 rounded-full bg-waiting-tint px-2.5 py-0.5 text-xs font-medium text-waiting">
+                <p
+                  key={a}
+                  className="mt-1.5 mr-1.5 inline-flex items-center gap-1.5 rounded-full bg-waiting-tint px-2.5 py-0.5 text-xs font-medium text-waiting"
+                >
                   <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden>
-                    <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="M3.5 8.5l3 3 6-7"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                   {a}
                 </p>
@@ -95,10 +122,17 @@ export function Chat({ token, initialTurns, firstName }: { token: string; initia
           ),
         )}
         {pending && (
-          <div className="flex w-fit animate-rise items-center gap-2.5 rounded-2xl rounded-bl-md bg-paper px-4 py-2.5" role="status">
+          <div
+            className="flex w-fit animate-rise items-center gap-2.5 rounded-2xl rounded-bl-md bg-paper px-4 py-2.5"
+            role="status"
+          >
             <span className="flex gap-1" aria-hidden>
               {[0, 150, 300].map((d) => (
-                <span key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand/60" style={{ animationDelay: `${d}ms` }} />
+                <span
+                  key={d}
+                  className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand/60"
+                  style={{ animationDelay: `${d}ms` }}
+                />
               ))}
             </span>
             <span key={thinking} className="animate-rise text-xs text-ink-faint">

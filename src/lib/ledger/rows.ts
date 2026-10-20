@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { toCents } from "../money";
+import { allocate, toCents } from "../money";
 import type { LedgerRow, LedgerStatus } from "./columns";
 import type { InvoiceStatus } from "@prisma/client";
 
@@ -36,6 +36,20 @@ export async function loadLedgerRows(schoolId: string): Promise<LedgerRow[]> {
   ]);
   const support = new Set(supportFlags.map((f) => f.familyId));
 
+  // Each invoice's payments, split across its children to the cent.
+  const shares = new Map<string, Map<string, number>>();
+  const shareOf = (invoice: (typeof enrolments)[number]["event"]["invoices"][number], studentId: string) => {
+    let split = shares.get(invoice.id);
+    if (!split) {
+      const ids = [...new Set(invoice.lines.map((l) => l.studentId))];
+      const weights = ids.map((id) => invoice.lines.filter((l) => l.studentId === id).reduce((n, l) => n + toCents(l.amount), 0));
+      const parts = allocate(toCents(invoice.amountPaid), weights);
+      split = new Map(ids.map((id, i) => [id, parts[i]]));
+      shares.set(invoice.id, split);
+    }
+    return split.get(studentId) ?? 0;
+  };
+
   return enrolments.map((e) => {
     const s = e.student;
     const fee = e.event.feeItems.reduce((n, f) => n + toCents(f.amount), 0);
@@ -43,8 +57,7 @@ export async function loadLedgerRows(schoolId: string): Promise<LedgerRow[]> {
     const invoice = e.event.invoices.find((i) => i.familyId === s.familyId);
     // A withdrawn child's line comes off the invoice, so they owe (and are owed) nothing here.
     const lineCents = !e.attending ? 0 : (invoice?.lines.filter((l) => l.studentId === s.id).reduce((n, l) => n + toCents(l.amount), 0) ?? fee);
-    const invoiceTotal = invoice ? toCents(invoice.total) : 0;
-    const paidCents = invoice && invoiceTotal > 0 ? Math.round((toCents(invoice.amountPaid) * lineCents) / invoiceTotal) : 0;
+    const paidCents = invoice && e.attending ? shareOf(invoice, s.id) : 0;
     const methods = new Set(invoice?.payments.map((p) => (p.method === "PAYPAL" ? "PayPal" : p.method === "CASH" ? "Cash" : "Other")));
     const last = invoice?.payments[0]?.paidAt;
 

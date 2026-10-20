@@ -69,3 +69,14 @@ test("payment plans go by the instalments, not the event dates", () => {
   assert.equal(behind.tier, "overdue");
   assert.match(behind.reason, /2 Nov 2026/);
 });
+
+test("a deposit paid before the plan doesn't count towards its instalments", () => {
+  // $285 owing, $85 deposit paid, then a plan for the $200 left: 2 x $100.
+  const plan = [
+    { dueOn: "2026-10-26", amount: 10000 },
+    { dueOn: "2026-11-02", amount: 10000 },
+  ];
+  const r = chooseReminders([family({ plan, paid: 8500, status: "PARTIALLY_PAID" })], event, "2026-10-28").chosen[0];
+  assert.ok(r, "behind on the first instalment");
+  assert.match(r.reason, /26 Oct 2026/);
+});

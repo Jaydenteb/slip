@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildInvoiceDrafts } from "./build";
-import { toCents, fromCents, splitInstalments } from "../money";
+import { allocate, toCents, fromCents, splitInstalments } from "../money";
 
 const camp = [{ label: "Year 4 camp", amount: 28500, deposit: 8500 }];
 
@@ -46,10 +46,16 @@ test("money round-trips through cents", () => {
   assert.throws(() => toCents("1.234"));
 });
 
-test("instalments add up exactly, leftovers on the first", () => {
+test("instalments add up exactly, leftovers on the last (the first is PayPal's minimum)", () => {
   const parts = splitInstalments(28500, 4);
   assert.deepEqual(parts, [7125, 7125, 7125, 7125]);
   const odd = splitInstalments(10000, 3);
-  assert.deepEqual(odd, [3334, 3333, 3333]);
+  assert.deepEqual(odd, [3333, 3333, 3334]);
   assert.equal(odd.reduce((a, b) => a + b, 0), 10000);
+});
+
+test("a payment split across siblings adds up to the cent", () => {
+  assert.deepEqual(allocate(8501, [28500, 28500]), [4251, 4250]);
+  assert.deepEqual(allocate(10000, [1, 1, 1]), [3334, 3333, 3333]);
+  assert.deepEqual(allocate(500, [0, 0]), [0, 0]);
 });

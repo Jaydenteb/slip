@@ -39,6 +39,7 @@ export function WithdrawButton({ invoiceId, students }: { invoiceId: string; stu
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason (optional, no medical details)"
+        aria-label="Reason (optional, no medical details)"
         maxLength={200}
         className="w-64 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"
       />

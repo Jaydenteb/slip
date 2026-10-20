@@ -8,12 +8,12 @@
   --surface: #ffffff;
   --ink: #1c2321;
   --ink-soft: #4b5652;
-  --ink-faint: #7d8784;
+  --ink-faint: #646e6a; /* 4.97:1 on paper, AA for small text */
   --line: #e7e3da;
   --brand: #0e7c66;
   --brand-strong: #0a5e4d;
   --brand-tint: #e3f2ed;
-  --waiting: #b26a00;
+  --waiting: #925700; /* 5.2:1 on its tint */
   --waiting-tint: #fdf1dc;
   --danger: #b42318;
   --danger-tint: #fdecea;

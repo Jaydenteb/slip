@@ -77,7 +77,14 @@ const GROUPING = {
 function col(field: LedgerColumn, extra: Partial<ColDef<LedgerRow>> = {}): ColDef<LedgerRow> {
   const c = LEDGER_COLUMNS[field];
   // Explicit filter types, so the filter model from Ask the ledger always matches.
-  return { field, colId: field, headerName: c.label, filter: FILTER[c.kind], ...(CAN_GROUP && { enableRowGroup: c.kind === "text" }), ...extra };
+  return {
+    field,
+    colId: field,
+    headerName: c.label,
+    filter: FILTER[c.kind],
+    ...(CAN_GROUP && { enableRowGroup: c.kind === "text" }),
+    ...extra,
+  };
 }
 
 export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
@@ -95,13 +102,14 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
       col("className", { width: 130 }),
       // Status early: it's what the office scans for.
       col("status", { width: 165, cellRenderer: StatusCell, enableCellChangeFlash: true }),
-      col("year", { width: 80, hide: true }),
+      // Then the money, so it's on screen without scrolling sideways.
+      col("amount", { width: 125, valueFormatter: money, type: "rightAligned", ...SUM }),
+      col("paid", { width: 125, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
+      col("owing", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
+      col("depositPaid", { width: 130, enableCellChangeFlash: true }),
       col("family", { width: 120 }),
       col("event", { minWidth: 180, flex: 1 }),
-      col("amount", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM }),
-      col("paid", { width: 130, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
-      col("owing", { width: 145, valueFormatter: money, type: "rightAligned", ...SUM, enableCellChangeFlash: true }),
-      col("depositPaid", { width: 130, enableCellChangeFlash: true }),
+      col("year", { width: 80, hide: true }),
       col("onPlan", { width: 130, cellRenderer: FlagCell }),
       col("needsSupport", { width: 110, cellRenderer: FlagCell }),
       col("consent", { width: 110, enableCellChangeFlash: true }),
@@ -131,23 +139,27 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
     return () => clearInterval(timer);
   }, []);
 
-  // A totals row for whatever is currently showing, so filtered views add up too.
+  // A totals row for whatever is currently showing, so filtered views add up too. Money
+  // counts only what's been billed, the same as the Collected card above.
   const updateTotals = useCallback(() => {
     const api = apiRef.current;
     if (!api) return;
     let amount = 0;
     let paid = 0;
     let count = 0;
+    let withdrawn = 0;
     api.forEachNodeAfterFilter((n) => {
       if (!n.data) return;
+      if (n.data.status === "Withdrawn") withdrawn++;
+      else count++;
+      if (!isBilled(n.data)) return;
       amount += n.data.amount;
       paid += n.data.paid;
-      count++;
     });
     setTotals([
       {
         id: "totals",
-        student: `${count} ${count === 1 ? "student" : "students"}`,
+        student: `${count} going${withdrawn ? ` · ${withdrawn} withdrawn` : ""}`,
         amount: Math.round(amount * 100) / 100,
         paid: Math.round(paid * 100) / 100,
         owing: Math.round((amount - paid) * 100) / 100,
@@ -165,7 +177,7 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
       const state = toGridState(result.data, { canGroup: CAN_GROUP });
       const api = apiRef.current;
       if (!api) return;
-      api.applyColumnState({ state: state.columnState, defaultState: { sort: null } });
+      api.applyColumnState({ state: state.columnState, applyOrder: true, defaultState: { sort: null } });
       api.setFilterModel(state.filterModel);
       setView({ explanation: result.data.explanation, skipped: state.skipped });
     });
@@ -178,13 +190,14 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
     api.applyColumnState({
       defaultState: { sort: null, ...(CAN_GROUP ? { rowGroup: false } : {}) },
       state: columnDefs.map((c) => ({ colId: c.colId!, hide: c.colId === "year" })),
+      applyOrder: true,
     });
     setView(null);
     setQuestion("");
   }
 
   const summary = useMemo(() => {
-    const billed = rows.filter((r) => !["Not invoiced", "Waiting for approval", "Cancelled"].includes(r.status));
+    const billed = rows.filter(isBilled);
     const amount = billed.reduce((n, r) => n + r.amount, 0);
     const paid = billed.reduce((n, r) => n + r.paid, 0);
     return {
@@ -204,7 +217,12 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
         <Stat label="Collected" value={aud(summary.paid)} sub={`of ${aud(summary.amount)} invoiced`} />
         <Stat label="Not started paying" value={String(summary.unpaid)} sub="students" />
         <Stat label="On a payment plan" value={String(summary.plans)} sub="families" />
-        <Stat label="Need support" value={String(summary.support)} sub="families to follow up" tone={summary.support ? "waiting" : undefined} />
+        <Stat
+          label="Need support"
+          value={String(summary.support)}
+          sub="families to follow up"
+          tone={summary.support ? "waiting" : undefined}
+        />
       </div>
 
       <Card className="p-4">
@@ -227,7 +245,7 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               maxLength={300}
-              placeholder="Ask the ledger, e.g. who in 4B hasn't paid the camp deposit?"
+              placeholder="Ask the ledger, e.g. who hasn't paid the deposit?"
               className="h-11 w-full rounded-lg border border-line bg-paper pr-3 pl-9 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
             />
           </div>
@@ -237,7 +255,13 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
         </form>
         {!view && !asking && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Who in 4B hasn't paid the camp deposit yet?", ...(CAN_GROUP ? ["Group by class with totals"] : []), "Who owes more than $200?", "Who paid cash?", "Who hasn't given consent?"].map((s) => (
+            {[
+              "Who in 4B hasn't paid the camp deposit yet?",
+              ...(CAN_GROUP ? ["Group by class with totals"] : []),
+              "Who owes more than $200?",
+              "Who paid cash?",
+              "Who hasn't given consent?",
+            ].map((s) => (
               <button
                 key={s}
                 type="button"
@@ -252,22 +276,30 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
             ))}
           </div>
         )}
-        {view && (
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-            <span className="rounded-full bg-brand-tint px-3 py-1 font-medium text-brand-strong">✦ {view.explanation}</span>
-            {view.skipped.length > 0 && <span className="text-ink-faint">Couldn&rsquo;t apply: {view.skipped.join("; ")}</span>}
-            <button type="button" onClick={clearView} className="text-ink-soft underline-offset-2 hover:text-ink hover:underline">
-              Show everyone
-            </button>
-          </div>
-        )}
-        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+        <div aria-live="polite">
+          {view && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <span className="rounded-full bg-brand-tint px-3 py-1 font-medium text-brand-strong">✦ {view.explanation}</span>
+              {view.skipped.length > 0 && <span className="text-ink-faint">Couldn&rsquo;t apply: {view.skipped.join("; ")}</span>}
+              <button
+                type="button"
+                onClick={clearView}
+                className="text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+              >
+                Show everyone
+              </button>
+            </div>
+          )}
+          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+        </div>
       </Card>
 
       <AgGridProvider modules={modules}>
-        <div style={{ height: "max(480px, calc(100vh - 380px))" }}>
+        {/* A class or two fits on the page as it is; a big ledger scrolls inside the grid. */}
+        <div style={rows.length <= 25 ? undefined : { height: "max(480px, calc(100vh - 380px))" }}>
           <AgGridReact<LedgerRow>
             theme={theme}
+            domLayout={rows.length <= 25 ? "autoHeight" : "normal"}
             rowData={rows}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
@@ -280,20 +312,33 @@ export function LedgerGrid({ initialRows }: { initialRows: LedgerRow[] }) {
             }}
             onModelUpdated={updateTotals}
             animateRows
-            overlayNoRowsTemplate="No students match. Try asking another way, or show everyone."
+            overlayComponentParams={{
+              noRows: { overlayText: "No students on any event yet. Set up an event to see it here." },
+              noMatchingRows: { overlayText: "No students match. Try asking another way, or show everyone." },
+            }}
           />
         </div>
       </AgGridProvider>
       <div className="flex justify-end">
-        <Button variant="ghost" onClick={() => apiRef.current?.exportDataAsCsv({
+        <Button
+          variant="ghost"
+          onClick={() =>
+            apiRef.current?.exportDataAsCsv({
               fileName: "slip-ledger.csv",
               processCellCallback: (p) => safeCsvCell(p.formatValue(p.value)),
-            })}>
+            })
+          }
+        >
           Export CSV
         </Button>
       </div>
     </div>
   );
+}
+
+// Rows whose money counts towards totals: invoiced and not cancelled.
+function isBilled(r: LedgerRow) {
+  return !["Not invoiced", "Waiting for approval", "Cancelled"].includes(r.status);
 }
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "waiting" }) {

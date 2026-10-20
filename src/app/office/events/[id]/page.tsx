@@ -14,6 +14,12 @@ import { WithdrawButton } from "./withdraw-button";
 import { SyncButton } from "./sync-button";
 import { syncOpenInvoices } from "@/lib/payments/sync";
 
+export async function generateMetadata({ params }: PageProps<"/office/events/[id]">) {
+  const { id } = await params;
+  const event = await db.event.findFirst({ where: { id, schoolId: DEMO_SCHOOL_ID }, select: { title: true } });
+  return { title: event?.title ?? "Event" };
+}
+
 export default function EventPage({ params }: PageProps<"/office/events/[id]">) {
   return (
     <Suspense fallback={<Skeleton className="h-96" />}>
@@ -153,7 +159,9 @@ async function EventDetail({ params }: { params: Promise<{ id: string }> }) {
                 <th className="hidden px-3 py-3 sm:px-5 text-right font-medium sm:table-cell">Total</th>
                 <th className="px-3 py-3 sm:px-5 text-right font-medium">Paid</th>
                 <th className="px-3 py-3 sm:px-5 font-medium">Status</th>
-                <th className="px-3 py-3 sm:px-5" />
+                <th className="px-3 py-3 sm:px-5">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">

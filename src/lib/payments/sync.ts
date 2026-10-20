@@ -10,7 +10,9 @@ export async function syncInvoice(invoiceId: string, actor: "sync" | "webhook" =
   const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, include: { event: true } });
   if (!invoice?.paypalInvoiceId) return { changed: false };
 
-  const live = reconcile(await getInvoice(invoice.paypalInvoiceId));
+  const raw = await getInvoice(invoice.paypalInvoiceId);
+  const live = reconcile(raw);
+  const payerUrl = raw.detail?.metadata?.recipient_view_url;
   const known = new Set(
     (await db.payment.findMany({ where: { invoiceId }, select: { paypalPaymentId: true } })).map((p) => p.paypalPaymentId),
   );
@@ -33,6 +35,8 @@ export async function syncInvoice(invoiceId: string, actor: "sync" | "webhook" =
         ...(status ? { status } : {}),
         amountPaid: fromCents(live.amountPaid),
         amountRefunded: fromCents(live.amountRefunded),
+        // Filled in here if it couldn't be read when the invoice was sent.
+        ...(!invoice.paypalPayerUrl && payerUrl ? { paypalPayerUrl: payerUrl } : {}),
         lastSyncedAt: new Date(),
       },
     });

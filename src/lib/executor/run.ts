@@ -101,10 +101,11 @@ export async function rejectApproval(approvalItemId: string, decidedBy: string, 
   });
   if (updated.count === 0) throw new ApprovalStateError("This item has already been decided or is running");
   const item = await db.approvalItem.findUniqueOrThrow({ where: { id: approvalItemId } });
-  // Proposed invoices in a rejected batch are dropped so the office can draft again.
+  // Proposed invoices in a rejected batch are dropped so the office can draft again. One
+  // that reached PayPal but was never sent stays there as an unsent draft no family sees.
   if (item.kind === "INVOICE_BATCH") {
     const { invoiceIds } = item.payload as InvoiceBatchPayload;
-    await db.invoice.deleteMany({ where: { id: { in: invoiceIds }, status: "PROPOSED", paypalInvoiceId: null } });
+    await db.invoice.deleteMany({ where: { id: { in: invoiceIds }, status: "PROPOSED" } });
   }
   await logDecision(item.schoolId, item.id, decidedBy, "rejected");
 }
@@ -121,13 +122,18 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
 
   const note = invoiceNote(event);
   const failures: string[] = [];
-  // Invoices this approval already created in PayPal, by reference, in case a previous
-  // attempt stopped before saving the PayPal id.
-  const created = await db.agentAction.findMany({
-    where: { approvalItemId, action: "paypal.create_invoice", ok: true },
-    select: { input: true, output: true },
+  // What earlier attempts at this approval already did in PayPal, so a retry picks up
+  // where it stopped: invoices created but not saved, and invoices already sent.
+  const earlier = await db.agentAction.findMany({
+    where: { approvalItemId, action: { in: ["paypal.create_invoice", "paypal.send_invoice"] }, ok: true },
+    select: { action: true, input: true, output: true },
   });
-  const createdFor = new Map(created.map((c) => [(c.input as { reference?: string }).reference, c.output]));
+  const createdFor = new Map(
+    earlier.filter((c) => c.action === "paypal.create_invoice").map((c) => [createKey(c.input as CreateInput), c.output]),
+  );
+  const sent = new Set(
+    earlier.filter((c) => c.action === "paypal.send_invoice").map((c) => (c.input as { invoice_id?: string }).invoice_id),
+  );
 
   // A few at a time: fast enough for a class, gentle on the sandbox.
   await inBatches(invoices, 4, async (inv) => {
@@ -136,9 +142,9 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
     try {
       let paypalId = inv.paypalInvoiceId;
       const fields = invoiceFields(event, inv, note, inv.minimumPayment != null ? toCents(inv.minimumPayment) : null);
-      const earlier = createdFor.get(fields.reference);
-      if (!paypalId && earlier) {
-        paypalId = invoiceIdFrom(earlier);
+      const createdEarlier = createdFor.get(createKey(fields));
+      if (!paypalId && createdEarlier) {
+        paypalId = invoiceIdFrom(createdEarlier);
         await db.invoice.update({ where: { id: inv.id }, data: { paypalInvoiceId: paypalId } });
       }
       // Create once. If a previous attempt created it but failed to send, reuse it.
@@ -148,16 +154,16 @@ async function sendInvoiceBatch(approvalItemId: string, payload: InvoiceBatchPay
         await db.invoice.update({ where: { id: inv.id }, data: { paypalInvoiceId: paypalId } });
       }
 
-      await gated(approvalItemId, "send_invoice", { invoice_id: paypalId, send_to_recipient: true });
-      const live = await getInvoice(paypalId);
-      await db.invoice.update({
-        where: { id: inv.id },
-        data: {
-          status: "SENT",
-          paypalPayerUrl: live.detail?.metadata?.recipient_view_url ?? null,
-          lastSyncedAt: new Date(),
-        },
-      });
+      if (!sent.has(paypalId)) {
+        await gated(approvalItemId, "send_invoice", { invoice_id: paypalId, send_to_recipient: true });
+      }
+      // Sent: record that first, so nothing can make a retry send it again.
+      await db.invoice.update({ where: { id: inv.id }, data: { status: "SENT", lastSyncedAt: new Date() } });
+      // The family's pay link. If PayPal can't be read right now, the next sync fills it in.
+      const live = await getInvoice(paypalId).catch(() => null);
+      if (live) {
+        await db.invoice.update({ where: { id: inv.id }, data: { paypalPayerUrl: live.detail?.metadata?.recipient_view_url ?? null } });
+      }
     } catch (err) {
       failures.push(`${inv.family.familyName}: ${briefError(err)}`);
     }
@@ -229,7 +235,9 @@ async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayloa
   const gross = toCents(inv.amountPaid) + toCents(inv.amountRefunded);
   if (
     gross !== payload.grossPaid ||
-    toCents(inv.amountRefunded) !== payload.refundedSoFar + refundedHere ||
+    // PayPal may not show this approval's own refunds yet, so anywhere in between is fine.
+    toCents(inv.amountRefunded) < payload.refundedSoFar ||
+    toCents(inv.amountRefunded) > payload.refundedSoFar + refundedHere ||
     auditedRefunds - refundedHere > payload.refundedSoFar
   ) {
     throw new UserError("Payments on this invoice changed since the withdrawal was drafted. Reject it and draft it again.");
@@ -307,6 +315,12 @@ async function applyWithdrawal(approvalItemId: string, payload: WithdrawalPayloa
     }
   }
   await syncInvoice(inv.id);
+}
+
+// Two families can share a surname (and so a reference); the recipient's email tells them apart.
+type CreateInput = { reference?: string; primary_recipients?: { billing_info?: { email_address?: string } }[] };
+function createKey(input: CreateInput) {
+  return `${input.reference ?? ""}|${input.primary_recipients?.[0]?.billing_info?.email_address ?? ""}`;
 }
 
 type InvoiceForPayPal = Prisma.InvoiceGetPayload<{ include: { family: true; lines: true } }>;
