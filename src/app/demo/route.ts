@@ -30,5 +30,6 @@ export async function GET(request: NextRequest) {
   } else if (/^\/office(\/[\w-]+)*$/.test(to)) {
     target = to;
   }
-  return Response.redirect(new URL(target, request.url), 303);
+  // A relative redirect: behind Render's proxy, request.url is the internal address.
+  return new Response(null, { status: 303, headers: { Location: target, "Cache-Control": "no-store" } });
 }

@@ -8,7 +8,9 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (request.method !== "GET" || pathname === "/office/ledger/data") return NextResponse.next();
   if (request.cookies.has("slip_school")) return NextResponse.next();
-  const url = new URL("/demo", request.url);
+  const url = request.nextUrl.clone();
+  url.pathname = "/demo";
+  url.search = "";
   url.searchParams.set("to", pathname);
   return NextResponse.redirect(url);
 }
