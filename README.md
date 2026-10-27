@@ -174,7 +174,7 @@ Slip scopes every query to the family or school in application code, and databas
 
 ## Run it locally
 
-Requires Node 22+ and Docker. You'll need:
+Requires Node 22.23.4 or later (a patched release) and Docker. You'll need:
 - a PayPal sandbox REST app with Invoicing enabled, plus a sandbox business account (the school) and a sandbox personal account (the parent);
 - an Anthropic API key.
 
