@@ -248,28 +248,34 @@ const ACTION_LABEL: Record<string, string> = {
 
 // Turns the stored API conversation into what the parent sees.
 export function toTurns(messages: MessageParam[]): ChatTurn[] {
-  const turns: ChatTurn[] = [];
+  // Text written alongside a tool call is often Slip thinking aloud ("Parent said Leo. Proceed."),
+  // so a reply shows it only when there's no text after the tools.
+  const turns: (ChatTurn & { notes: string[]; said: string[] })[] = [];
   for (const m of messages) {
     if (m.role === "user") {
-      if (typeof m.content === "string") turns.push({ from: "parent", text: m.content, actions: [] });
+      if (typeof m.content === "string") turns.push({ from: "parent", text: m.content, actions: [], notes: [], said: [] });
       continue;
     }
     if (typeof m.content === "string") {
-      turns.push({ from: "slip", text: m.content, actions: [] });
+      turns.push({ from: "slip", text: "", actions: [], notes: [], said: [m.content] });
       continue;
     }
     const text = m.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n\n").trim();
     const actions = m.content.flatMap((b) => (b.type === "tool_use" && ACTION_LABEL[b.name] ? [ACTION_LABEL[b.name]] : []));
-    const prev = turns[turns.length - 1];
+    const callsTools = m.content.some((b) => b.type === "tool_use");
+    let prev = turns[turns.length - 1];
     // A reply can span several assistant messages (text, tool call, more text): show it as one.
-    if (prev?.from === "slip") {
-      prev.text = [prev.text, text].filter(Boolean).join("\n\n");
-      prev.actions.push(...actions);
-    } else if (text || actions.length) {
-      turns.push({ from: "slip", text, actions });
+    if (prev?.from !== "slip") {
+      if (!text && !actions.length) continue;
+      prev = { from: "slip", text: "", actions: [], notes: [], said: [] };
+      turns.push(prev);
     }
+    prev.actions.push(...actions);
+    if (text) (callsTools ? prev.notes : prev.said).push(text);
   }
-  return turns;
+  return turns.map(({ notes, said, ...t }) =>
+    t.from === "slip" ? { ...t, text: (said.length ? said : notes).join("\n\n") } : t,
+  );
 }
 
 const GAVE_UP = "Sorry, that took me too long to work out. Could you ask again in a simpler way, or contact the school office?";
